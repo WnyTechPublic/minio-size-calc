@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MinIO AIStor 사이징 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        /* JS 포탈 툴팁 */
+        [data-tooltip] { cursor: help; }
+        #js-tooltip {
+            position: fixed; z-index: 9999;
+            background: #1e293b; color: #f8fafc;
+            font-size: 0.74rem; line-height: 1.6;
+            padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+            max-width: 300px; width: max-content;
+            pointer-events: none; display: none;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+            white-space: normal; word-break: keep-all;
+        }
+        #js-tooltip::after {
+            content: ''; position: absolute;
+            top: 100%; left: var(--arrow-x, 50%);
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #1e293b;
+        }
+
+        /* 섹션 헤더 — 왼쪽 빨간 보더 */
+        .section-header {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.875rem; font-weight: 700; color: #1f2937;
+            padding: 0 0 12px 12px; margin-bottom: 16px;
+            border-bottom: 1px solid #f1f5f9;
+            border-left: 3px solid #ef4444;
+        }
+        /* 번호 — 배경 없이 작은 회색 텍스트 */
+        .section-header .badge {
+            font-size: 0.7rem; font-weight: 600; color: #9ca3af;
+            background: none; border-radius: 0; width: auto; height: auto;
+            display: inline; flex-shrink: 0;
+        }
+
+        /* 입력 필드 통일 */
+        .field-input {
+            width: 100%; padding: 8px 12px;
+            border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 0.875rem; background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            outline: none;
+        }
+        .field-input:focus {
+            border-color: #f87171;
+            box-shadow: 0 0 0 3px rgba(248,113,113,0.15);
+        }
+        input[type=number].field-input { width: auto; }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { opacity: 1; }
+
+        /* KPI 카드 */
+        .kpi-card { border-radius: 12px; padding: 16px; border: 1px solid; }
+        .kpi-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+        .kpi-value { font-size: 1.6rem; font-weight: 900; line-height: 1.1; }
+        .kpi-sub   { font-size: 0.72rem; margin-top: 4px; opacity: 0.7; }
+
+        /* 결과 행 */
+        .result-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; }
+        .result-row + .result-row { border-top: 1px solid #f8fafc; }
+        .result-label { font-size: 0.8rem; color: #6b7280; flex-shrink: 0; min-width: 110px; }
+        .result-value { font-size: 0.875rem; font-weight: 600; color: #111827; text-align: right; word-break: break-all; }
+
+        /* 체크리스트 */
+        .warn-message { word-break: keep-all; overflow-wrap: break-word; line-height: 1.5; }
+        .sum-value { overflow-wrap: break-word; word-break: break-all; text-align: right; }
+
+        /* ── 독립 스크롤 레이아웃 (lg 이상) ── */
+        body { overflow: hidden; }
+        @media (max-width: 1023px) {
+            body { overflow: auto; }
+            #app-main { height: auto !important; overflow: visible !important; }
+            #input-panel, #result-panel { overflow: visible !important; height: auto !important; }
+        }
+        .scroll-panel { overflow-y: auto; overflow-x: hidden; }
+        .scroll-panel::-webkit-scrollbar { width: 4px; }
+        .scroll-panel::-webkit-scrollbar-track { background: transparent; }
+        .scroll-panel::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .scroll-panel::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+        /* @media print */
+        @media print {
+            @page { margin: 15mm 12mm; size: A4 portrait; }
+            #input-panel, .no-print, footer { display: none !important; }
+            /* 인쇄 시 독립 스크롤 해제 — 전체 내용 출력 */
+            body { overflow: visible !important; }
+            #app-main { height: auto !important; overflow: visible !important; }
+            #input-panel, #result-panel { overflow: visible !important; height: auto !important; }
+            main > div { display: block !important; }
+            #result-panel { display: block !important; width: 100% !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { background: white !important; }
+            .shadow-sm { box-shadow: none !important; }
+            .bg-white { break-inside: avoid; }
+            header { position: static !important; }
+            #chart-storage { height: 140px !important; }
+            #chart-parity-wrap { height: auto !important; min-height: 120px; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-gray-800" style="font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;">
+
+    <!-- ───── 헤더 ───── -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+        <div class="max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-3 flex items-center justify-between gap-4">
+            <div class="min-w-0">
+                <h1 class="text-base font-bold text-gray-900 truncate">MinIO AIStor 사이징 계산기</h1>
+            </div>
+            <button onclick="resetToDefaults()"
+                class="no-print flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium transition-colors shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                초기화
+            </button>
+        </div>
+    </header>
+
+    <!-- ───── 메인 ───── -->
+    <main id="app-main" class="overflow-hidden">
+        <div class="max-w-[1800px] mx-auto h-full grid grid-cols-1 lg:grid-cols-2">
+
+            <!-- ════════════ 입력 패널 ════════════ -->
+            <section id="input-panel" class="scroll-panel space-y-4 px-4 sm:px-6 xl:px-8 py-5 border-r border-gray-200">
+
+                <!-- ① 클러스터 기본 정보 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="section-header">
+                        <span class="badge">①</span>
+                        클러스터 기본 정보
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">노드(서버) 수</label>
+                            <div class="flex items-center gap-3">
+                                <input id="nodeCount" type="number" min="1" max="64" value="4"
+                                    class="field-input w-24">
+                                <span class="text-sm text-gray-400">대 &nbsp;(1 ~ 64)</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">환경 구분</label>
+                            <div class="flex gap-2">
+                                <label class="flex-1 flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
+                                    <input type="radio" name="environment" value="production" checked class="accent-red-500">
+                                    <span class="text-sm font-medium text-gray-700">운영 (Production)</span>
+                                </label>
+                                <label class="flex-1 flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-blue-200 transition-colors has-[:checked]:border-blue-400 has-[:checked]:bg-blue-50">
+                                    <input type="radio" name="environment" value="dev" class="accent-blue-500">
+                                    <span class="text-sm font-medium text-gray-700">개발 (Dev)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ② 드라이브 구성 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="section-header">
+                        <span class="badge">②</span>
+                        드라이브 구성
+                    </div>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 타입</label>
+                                <select id="driveType" class="field-input">
+                                    <option value="NVMe">NVMe</option>
+                                    <option value="SSD">SSD</option>
+                                    <option value="HDD">HDD ⚠️ 비권고</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">RAID 구성
+                                    <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
+                                        data-tooltip="MinIO는 RAID 없이 개별 드라이브를 직접 관리하는 JBOD 구성을 강력 권고합니다. RAID 구성 시 MinIO가 볼륨을 단일 드라이브로 인식하여 EC 효율이 저하됩니다.">?</span>
+                                </label>
+                                <select id="raidType" class="field-input">
+                                    <option value="JBOD">JBOD (권고)</option>
+                                    <option value="RAID0">RAID 0</option>
+                                    <option value="RAID1">RAID 1</option>
+                                    <option value="RAID10">RAID 10</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
+                            <div class="flex gap-2 mb-2">
+                                <input id="driveSizeTB" type="number" min="0.01" step="0.01" value="30.72"
+                                    class="field-input flex-1">
+                                <select id="driveUnit" class="field-input w-20 flex-shrink-0">
+                                    <option value="TB" selected>TB</option>
+                                    <option value="GB">GB</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1">
+                                <span class="text-xs text-gray-400 font-medium">권고:</span>
+                                <button type="button" onclick="setDriveSize(3.84)"   class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">3.84</button>
+                                <button type="button" onclick="setDriveSize(7.68)"   class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">7.68</button>
+                                <button type="button" onclick="setDriveSize(15.36)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">15.36</button>
+                                <button type="button" onclick="setDriveSize(30.72)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">30.72</button>
+                                <button type="button" onclick="setDriveSize(61.44)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">61.44</button>
+                                <button type="button" onclick="setDriveSize(122.88)" class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">122.88</button>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-1.5">※ 입력값을 TiB 단위로 그대로 처리 (공식 계산기 동일)</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">노드당 데이터 드라이브 수</label>
+                            <div class="flex items-center gap-3">
+                                <input id="drivesPerNode" type="number" min="1" max="64" value="4"
+                                    class="field-input w-24">
+                                <span class="text-sm text-gray-400">EA / 노드 (1 ~ 64)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ③ EC 설정 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="section-header">
+                        <span class="badge">③</span>
+                        EC (Erasure Coding) 설정
+                        <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
+                            data-tooltip="Stripe Size는 하나의 Erasure Set을 구성하는 드라이브 수(2/4/8/16 고정)이며, Parity는 장애를 허용할 드라이브 수입니다. Data 샤드(K) = Stripe - Parity, Usable 효율 = K / Stripe입니다.">?</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">Stripe Size (N)</label>
+                            <select id="stripeSize" class="field-input">
+                                <option value="2">2</option>
+                                <option value="4">4</option>
+                                <option value="8">8</option>
+                                <option value="16" selected>16</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">Parity (M)</label>
+                            <select id="parityShards" class="field-input"></select>
+                        </div>
+                    </div>
+                    <div id="ec-info" class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-gray-700 leading-7"></div>
+                </div>
+
+                <!-- ④ 메모리 / CPU / NIC -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="section-header">
+                        <span class="badge">④</span>
+                        메모리 / CPU / NIC
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                                노드당 RAM
+                                <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
+                                    data-tooltip="MinIO는 RAM의 75%를 GET 작업에 사용합니다. 256 GiB 미만 구성 시 동시 처리량이 제한됩니다.">?</span>
+                            </label>
+                            <select id="ramGiB" class="field-input">
+                                <option value="32">32 GiB</option>
+                                <option value="64">64 GiB</option>
+                                <option value="128">128 GiB</option>
+                                <option value="256" selected>256 GiB (공식 권고)</option>
+                                <option value="512">512 GiB</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                                    물리코어 / 노드
+                                    <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
+                                        data-tooltip="MinIO는 노드당 최소 8 물리코어 이상을 권고합니다. 단일 소켓 64코어 이상이 이상적이며, 2-Socket은 NUMA 경계 영향으로 성능이 낮을 수 있습니다.">?</span>
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <input id="physicalCores" type="number" min="4" max="256" value="64"
+                                        class="field-input w-24">
+                                    <span class="text-xs text-gray-400">코어</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                                    NIC 대역폭
+                                    <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
+                                        data-tooltip="네트워크 대역폭이 전체 처리량의 하드 상한선입니다. 100G 이상 구성을 권고하며, 이상적으로는 400G입니다.">?</span>
+                                </label>
+                                <select id="nicGbps" class="field-input">
+                                    <option value="1">1G</option>
+                                    <option value="10">10G</option>
+                                    <option value="25">25G</option>
+                                    <option value="40">40G</option>
+                                    <option value="100" selected>100G (권고)</option>
+                                    <option value="400">400G (이상)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ════════════ 결과 패널 ════════════ -->
+            <section id="result-panel" class="scroll-panel space-y-4 px-4 sm:px-6 xl:px-8 py-5">
+
+                <!-- 환경 배지 -->
+                <div id="env-banner" class="hidden rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2"></div>
+
+                <!-- KPI 3개 -->
+                <div class="grid grid-cols-3 gap-3">
+                    <!-- KPI 1: EC Usable — 스토리지 효율 -->
+                    <div class="kpi-card bg-gradient-to-br from-red-50 to-rose-100 border-red-200">
+                        <div class="kpi-label text-red-500">EC Usable ★</div>
+                        <div id="kpi-usable" class="kpi-value text-red-700">—</div>
+                        <div id="kpi-efficiency" class="kpi-sub text-red-500">효율 —%</div>
+                    </div>
+                    <!-- KPI 2: 데이터 안정성 — Parity가 높을수록 중요 -->
+                    <div class="kpi-card bg-gradient-to-br from-amber-50 to-orange-100 border-amber-200">
+                        <div class="kpi-label text-amber-600">데이터 안정성</div>
+                        <div id="kpi-fault" class="kpi-value text-amber-700">—</div>
+                        <div id="kpi-fault-detail" class="kpi-sub text-amber-600">—</div>
+                    </div>
+                    <!-- KPI 3: 클러스터 처리량 -->
+                    <div class="kpi-card bg-gradient-to-br from-blue-50 to-sky-100 border-blue-200">
+                        <div class="kpi-label text-blue-500">클러스터 처리량</div>
+                        <div id="kpi-throughput" class="kpi-value text-blue-700">—</div>
+                        <div id="kpi-throughput-node" class="kpi-sub text-blue-500">노드당 — GBps</div>
+                    </div>
+                </div>
+
+                <!-- 스토리지 + 시스템 스펙 2열 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- 스토리지 세부 -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <span class="text-base">📦</span> 스토리지 용량
+                        </h3>
+                        <div>
+                            <div class="result-row">
+                                <span class="result-label">총 RAW</span>
+                                <span id="storage-raw" class="result-value">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">유효 RAW</span>
+                                <span id="storage-eff-raw" class="result-value">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">스토리지 효율</span>
+                                <span id="storage-eff-pct" class="result-value text-orange-600">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">노드당 Usable</span>
+                                <span id="storage-per-node" class="result-value">—</span>
+                            </div>
+                            <!-- 숨김 (KPI에서 표시) -->
+                            <span id="storage-usable" class="hidden"></span>
+                        </div>
+                    </div>
+                    <!-- EC 복구 정보 -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <span class="text-base">🛡️</span> EC 복구 정보
+                        </h3>
+                        <div>
+                            <div class="result-row">
+                                <span class="result-label">Data / Parity</span>
+                                <span id="ec-dp" class="result-value">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">장애 허용</span>
+                                <span id="ec-fault" class="result-value text-amber-600 font-bold">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Write Quorum</span>
+                                <span id="ec-wq" class="result-value">—</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Erasure Set</span>
+                                <span id="ec-set" class="result-value">—</span>
+                            </div>
+                            <!-- 숨김 ID — 요약/renderNetwork/renderMemory 호환 유지 -->
+                            <span id="net-node" class="hidden"></span>
+                            <span id="net-cluster" class="hidden"></span>
+                            <span id="mem-req-node" class="hidden"></span>
+                            <span id="mem-req-cluster" class="hidden"></span>
+                            <span id="mem-ratio" class="hidden"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Erasure Set 시각화 — 전체 폭 카드 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                                <span class="text-base">🗂️</span> Erasure Set 구성
+                            </h3>
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                드라이브가 Stripe Size 단위로 묶여 독립 Set을 구성합니다. Set 내에서만 장애 허용이 동작합니다.
+                            </p>
+                        </div>
+                        <div id="es-summary" class="text-xs font-semibold text-right flex-shrink-0 ml-4"></div>
+                    </div>
+                    <!-- 드라이브 그리드 -->
+                    <div id="es-grid" class="overflow-x-auto pb-1"></div>
+                    <!-- Set별 Data / Parity 비율 바 -->
+                    <div id="es-ratio" class="space-y-2 mt-4 pt-3 border-t border-gray-100"></div>
+                    <!-- 범례 -->
+                    <div id="es-legend" class="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-50"></div>
+                    <!-- 설명 -->
+                    <p id="es-desc" class="text-xs text-gray-400 mt-2 leading-relaxed"></p>
+                </div>
+
+                <!-- 차트 2개 나란히 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- 차트 1: 스토리지 분해 -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
+                            <span class="text-base">📊</span> 스토리지 분해
+                        </h3>
+                        <p class="text-xs text-gray-400 mb-3">RAW 기준 Usable · EC · RAID 손실 비율</p>
+                        <div class="relative" style="height:180px;">
+                            <canvas id="chart-storage"></canvas>
+                        </div>
+                    </div>
+                    <!-- 차트 2: Parity 비교 -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
+                            <span class="text-base">📊</span> Parity별 효율 vs 안정성
+                        </h3>
+                        <p id="chart-parity-subtitle" class="text-xs text-gray-400 mb-3"></p>
+                        <div id="chart-parity-wrap" class="relative">
+                            <canvas id="chart-parity"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 권고 기준 체크리스트 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-1.5">
+                        <span class="text-base">✅</span> 권고 기준 충족 여부
+                    </h3>
+                    <ul id="warning-list" class="space-y-2"></ul>
+                </div>
+
+                <!-- 요약 리포트 -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-1.5">
+                        <span class="text-base">📋</span> 사이징 결과 요약
+                    </h3>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-400 uppercase mb-2">클러스터 구성</p>
+                            <dl class="space-y-1.5 text-sm">
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">노드</dt><dd id="sum-nodes" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">드라이브</dt><dd id="sum-drives" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">타입</dt><dd id="sum-drive-type" class="sum-value font-medium text-gray-800">—</dd></div>
+                            </dl>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-gray-400 uppercase mb-2">스토리지</p>
+                            <dl class="space-y-1.5 text-sm">
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">RAW</dt><dd id="sum-raw" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">유효 RAW</dt><dd id="sum-eff-raw" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">Usable</dt><dd id="sum-usable-txt" class="sum-value font-semibold text-red-600">—</dd></div>
+                            </dl>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-gray-400 uppercase mb-2">네트워크</p>
+                            <dl class="space-y-1.5 text-sm">
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">NIC</dt><dd id="sum-nic" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">처리량 상한</dt><dd id="sum-net" class="sum-value font-medium text-gray-800">—</dd></div>
+                            </dl>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-gray-400 uppercase mb-2">메모리</p>
+                            <dl class="space-y-1.5 text-sm">
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">RAM</dt><dd id="sum-ram" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">동시 요청</dt><dd id="sum-concurrent" class="sum-value font-medium text-gray-800">—</dd></div>
+                            </dl>
+                        </div>
+                    </div>
+                    <div id="sum-status" class="mt-4 pt-4 border-t border-gray-100 text-sm font-semibold text-center rounded-xl py-2.5"></div>
+
+                    <!-- 내보내기 버튼 -->
+                    <div class="no-print mt-4 grid grid-cols-2 gap-2">
+                        <button id="btn-copy" onclick="copyToClipboard()"
+                            class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-semibold transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                            텍스트 복사
+                        </button>
+                        <button id="btn-pdf" onclick="saveToPdf()"
+                            class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+                            </svg>
+                            PDF로 저장
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 주의사항 — 결과 패널 최하단 -->
+                <div class="no-print rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-amber-500 text-base">⚠️</span>
+                        <span class="text-sm font-semibold text-amber-800">주의사항</span>
+                    </div>
+                    <p class="text-xs text-amber-700 leading-relaxed ml-6">
+                        본 계산기의 수치는 MinIO 공식 문서 기반 계산식과 실제 EC 계산기 검증(7/7 케이스 일치)을 기반으로 한 추정치입니다.
+                        실제 용량·성능은 사용 환경, 워크로드 특성, 하드웨어 구성에 따라 크게 달라질 수 있으며,
+                        정확한 사이징을 위해서는 PoC 환경에서의 실측을 권장합니다.
+                    </p>
+                    <p class="text-xs text-amber-600 mt-1.5 ml-6">
+                        기준값 출처:
+                        <a href="https://min.io/docs/minio/linux/operations/concepts/erasure-coding.html"
+                           target="_blank" rel="noopener"
+                           class="underline underline-offset-2 hover:text-amber-900">MinIO AIStor 공식 문서</a>
+                        &nbsp;|&nbsp;
+                        EC 계산기 검증:
+                        <a href="https://min.io/product/erasure-code-calculator"
+                           target="_blank" rel="noopener"
+                           class="underline underline-offset-2 hover:text-amber-900">min.io/product/erasure-code-calculator</a>
+                    </p>
+                </div>
+
+            </section>
+        </div>
+    </main>
+
+    <script>
+    'use strict';
+
+    const CONFIG = {
+        validStripeSizes: [2, 4, 8, 16],
+        raidEfficiency: { JBOD: 1.0, RAID0: 1.0, RAID1: 0.5, RAID10: 0.5 },
+        thresholds: {
+            production: { minCoresWarning: 8,  minRamGiBWarning: 256, minNicGbpsWarning: 100, minNicGbpsCritical: 25, minParityHA: 2, minNodes: 4 },
+            dev:        { minCoresWarning: 4,  minRamGiBWarning: 64,  minNicGbpsWarning: null, minNicGbpsCritical: null, minParityHA: 2, minNodes: null },
+        },
+        defaults: {
+            nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
+            drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
+            ramGiB: 256, physicalCores: 64, nicGbps: 100,
+        },
+    };
+
+    function calculate(input) {
+        const { nodeCount, driveSizeTB, drivesPerNode, raidType, stripeSize, parityShards, ramGiB, nicGbps } = input;
+        const totalRawTB           = driveSizeTB * drivesPerNode * nodeCount;
+        const raidFactor           = CONFIG.raidEfficiency[raidType];
+        const effectiveRawTB       = totalRawTB * raidFactor;
+        const dataShards           = stripeSize - parityShards;
+        const usableTB             = effectiveRawTB * (dataShards / stripeSize);
+        const usableRounded        = Math.round(usableTB);
+        const storageEfficiencyPct = (dataShards / stripeSize) * 100;
+        const usablePerNodeTB      = usableTB / nodeCount;
+        const isMaxParity           = (parityShards === stripeSize / 2);
+        const writeQuorum           = isMaxParity ? (dataShards + 1) : dataShards;
+        const readQuorum            = dataShards;
+        const driveFailureTolerance = isMaxParity ? (parityShards - 1) : parityShards;
+        const totalDrives     = drivesPerNode * nodeCount;
+        const erasureSetCount = Math.floor(totalDrives / stripeSize);
+        const remainingDrives = totalDrives % stripeSize;
+        const nodeNicThroughputGBps    = nicGbps / 8;
+        const clusterThroughputGBps    = nodeNicThroughputGBps * nodeCount;
+        const maxConcurrentReqPerNode  = ramGiB * 1024 * 0.75 / 2;
+        const maxConcurrentReqCluster  = maxConcurrentReqPerNode * nodeCount;
+        const ratioVsRecommended       = (maxConcurrentReqPerNode / (CONFIG.defaults.ramGiB * 1024 * 0.75 / 2)) * 100;
+        return {
+            totalRawTB, effectiveRawTB, usableTB, usableRounded, storageEfficiencyPct, usablePerNodeTB,
+            dataShards, parityShards, isMaxParity, writeQuorum, readQuorum, driveFailureTolerance,
+            totalDrives, erasureSetCount, remainingDrives,
+            nodeNicThroughputGBps, clusterThroughputGBps,
+            maxConcurrentReqPerNode, maxConcurrentReqCluster, ratioVsRecommended, warnings: [],
+        };
+    }
+
+    function checkWarnings(input, result) {
+        const w = []; const isProd = input.environment === 'production';
+        const t = isProd ? CONFIG.thresholds.production : CONFIG.thresholds.dev;
+        const envTag = isProd ? '' : ' (개발 환경 완화 기준)';
+
+        if (input.physicalCores < t.minCoresWarning) {
+            w.push({ level: 'warning', item: 'CPU 코어', message: isProd
+                ? `S3 API 동시 처리 및 EC 연산 병목 위험 (최소 ${t.minCoresWarning}코어 이상 권고). MinIO는 단일 소켓 64코어 이상 구성을 권고하며, 2-Socket 구성은 NUMA 경계 영향으로 성능이 저하될 수 있습니다.`
+                : `개발 환경 권고(${t.minCoresWarning}코어) 미달. 현재 ${input.physicalCores}코어. EC 연산 및 동시 요청 처리 속도가 제한될 수 있습니다.` });
+        } else { w.push({ level: 'ok', item: 'CPU 코어', message: `${input.physicalCores}코어 ≥ ${t.minCoresWarning}${envTag}` }); }
+
+        if (input.ramGiB < t.minRamGiBWarning) {
+            w.push({ level: 'warning', item: '메모리', message: isProd
+                ? `동시 처리량 제한 위험. 현재 최대 동시 요청 수: ${Math.round(result.maxConcurrentReqPerNode).toLocaleString()} (권고 대비 ${Math.round(result.ratioVsRecommended)}%)`
+                : `개발 환경 권고(${t.minRamGiBWarning} GiB) 미달. 현재 ${input.ramGiB} GiB. 동시 요청 수: ${Math.round(result.maxConcurrentReqPerNode).toLocaleString()}. 기능 테스트는 가능하나 부하 테스트 시 제한됩니다.` });
+        } else { w.push({ level: 'ok', item: '메모리', message: `${input.ramGiB} GiB ≥ ${t.minRamGiBWarning} GiB${envTag}` }); }
+
+        if (input.driveType === 'HDD') {
+            w.push({ level: isProd ? 'critical' : 'warning', item: '드라이브 타입', message: isProd
+                ? 'HDD는 운영환경 장애 사례 다수 보고. 최소 SSD 구성을 강력 권고'
+                : 'HDD는 성능이 제한됩니다. 개발 테스트는 가능하나 운영 전 SSD/NVMe로 반드시 교체하세요.' });
+        } else { w.push({ level: 'ok', item: '드라이브 타입', message: `${input.driveType} 구성` }); }
+
+        if (input.raidType !== 'JBOD') {
+            w.push({ level: isProd ? 'warning' : 'ok', item: 'RAID 구성', message: isProd
+                ? 'RAID 구성은 MinIO 공식 비권고. JBOD + XFS 직접 연결 권고'
+                : `${input.raidType} — 개발 환경에서 허용. 운영 전환 시 JBOD + XFS 구성으로 변경 필요` });
+        } else { w.push({ level: 'ok', item: 'RAID 구성', message: 'JBOD' }); }
+
+        if (t.minNicGbpsWarning === null) {
+            w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G — 개발 환경 NIC 기준 적용 안 함` });
+        } else if (input.nicGbps < t.minNicGbpsCritical) {
+            w.push({ level: 'critical', item: 'NIC 대역폭', message: `${t.minNicGbpsCritical}G 미만 NIC는 처리량이 심각하게 제한됩니다 (노드당 최대 ${result.nodeNicThroughputGBps.toFixed(2)} GBps). 공식 권고 ${t.minNicGbpsWarning}G 이상으로 교체를 강력 권고합니다.` });
+        } else if (input.nicGbps < t.minNicGbpsWarning) {
+            w.push({ level: 'warning', item: 'NIC 대역폭', message: `공식 권고(${t.minNicGbpsWarning}G) 미달. 노드당 처리량 상한: ${result.nodeNicThroughputGBps.toFixed(2)} GBps` });
+        } else { w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G ≥ ${t.minNicGbpsWarning}G` }); }
+
+        if (input.parityShards < t.minParityHA) {
+            w.push({ level: 'warning', item: 'Erasure Set HA', message: `EC:1 이하는 HA 구성 불충분. 최소 EC:${t.minParityHA} 이상 권고` });
+        } else { w.push({ level: 'ok', item: 'Erasure Set HA', message: `Parity ${input.parityShards} ≥ ${t.minParityHA}` }); }
+
+        if (result.erasureSetCount === 0) {
+            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 드라이브 수(${result.totalDrives})가 Stripe Size(${input.stripeSize})보다 작아 Erasure Set을 구성할 수 없습니다. Stripe Size를 낮추거나 드라이브/노드 수를 늘려주세요.` });
+        } else if (result.remainingDrives > 0) {
+            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 ${result.totalDrives}드라이브 중 ${result.erasureSetCount}개 Set(${result.erasureSetCount * input.stripeSize}드라이브) 구성. 잔여 ${result.remainingDrives}드라이브는 Set 미구성으로 MinIO에서 사용되지 않습니다. Stripe Size의 배수(${input.stripeSize}의 배수)로 맞춰주세요.` });
+        } else if (result.erasureSetCount > 1) {
+            w.push({ level: 'ok', item: 'Erasure Set 구성', message: `다중 Set ${result.erasureSetCount}개 (${result.totalDrives}드라이브 ÷ Stripe ${input.stripeSize}). 모든 드라이브 사용.` });
+        } else {
+            w.push({ level: 'ok', item: 'Erasure Set 구성', message: `단일 Set (${result.totalDrives}드라이브 = Stripe ${input.stripeSize}). 모든 드라이브 사용.` });
+        }
+
+        if (t.minNodes !== null) {
+            if (input.nodeCount < t.minNodes) {
+                w.push({ level: 'warning', item: '운영 노드 수', message: `MinIO 분산 모드 운영 환경 최소 권고는 ${t.minNodes}노드입니다. 현재 ${input.nodeCount}노드 구성은 장애 복구 및 분산 성능이 제한됩니다.` });
+            } else { w.push({ level: 'ok', item: '운영 노드 수', message: `${input.nodeCount}대 ≥ ${t.minNodes}` }); }
+        }
+        return w;
+    }
+
+    function buildParityOptions(stripeSize) {
+        return Array.from({ length: stripeSize / 2 }, (_, i) => i + 1);
+    }
+    function clampParity(currentParity, newStripeSize) {
+        return Math.min(currentParity, newStripeSize / 2);
+    }
+    function formatCapacity(tib) {
+        if (tib >= 1024) return (tib / 1024).toFixed(1) + ' PiB';
+        return Math.round(tib) + ' TiB';
+    }
+    function validateInput(input) {
+        input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
+        input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
+        input.drivesPerNode = Math.max(1,    Math.min(64,  input.drivesPerNode || 1));
+        input.physicalCores = Math.max(4,    Math.min(256, input.physicalCores || 4));
+        if (!CONFIG.validStripeSizes.includes(input.stripeSize)) input.stripeSize = CONFIG.defaults.stripeSize;
+        input.parityShards = Math.max(1, Math.min(input.stripeSize / 2, input.parityShards || 1));
+        return input;
+    }
+
+    // ── 렌더링 ──────────────────────────────────────
+
+    function renderStorage(result) {
+        // KPI
+        setText('kpi-usable',    formatCapacity(result.usableTB));
+        setText('kpi-efficiency', `효율 ${result.storageEfficiencyPct.toFixed(1)}%`);
+        // 세부
+        setText('storage-raw',      result.totalRawTB.toFixed(2) + ' TiB');
+        setText('storage-eff-raw',  result.effectiveRawTB.toFixed(2) + ' TiB');
+        setText('storage-usable',   formatCapacity(result.usableTB));
+        setText('storage-eff-pct',  result.storageEfficiencyPct.toFixed(1) + '%');
+        setText('storage-per-node', result.usablePerNodeTB.toFixed(2) + ' TiB');
+    }
+
+    function renderNetwork(result) {
+        setText('kpi-throughput',      result.clusterThroughputGBps.toFixed(2) + ' GBps');
+        setText('kpi-throughput-node', `노드당 ${result.nodeNicThroughputGBps.toFixed(2)} GBps`);
+        setText('net-node',    result.nodeNicThroughputGBps.toFixed(2) + ' GBps');
+        setText('net-cluster', result.clusterThroughputGBps.toFixed(2) + ' GBps');
+    }
+
+    /** EC 복구 정보 카드 + 데이터 안정성 KPI 갱신 */
+    function renderEcResult(result) {
+        // KPI 2: 데이터 안정성 — 장애 허용 드라이브 수가 핵심
+        setText('kpi-fault',        `${result.driveFailureTolerance}드라이브`);
+        setText('kpi-fault-detail', `Write Quorum ${result.writeQuorum} / EC ${result.dataShards}+${result.parityShards}`);
+
+        // EC 복구 카드
+        setText('ec-dp',    `Data ${result.dataShards} / Parity ${result.parityShards}`);
+
+        // 장애 허용 — MaxParity 시 M-1, 일반 시 M
+        const ftLabel = result.isMaxParity
+            ? `최대 ${result.driveFailureTolerance}드라이브 (MaxParity: M-1)`
+            : `최대 ${result.driveFailureTolerance}드라이브`;
+        setText('ec-fault', ftLabel);
+
+        // Write Quorum — MaxParity 시 K+1, 일반 시 K
+        const wqLabel = result.isMaxParity
+            ? `${result.writeQuorum}드라이브 (MaxParity: K+1)`
+            : `${result.writeQuorum}드라이브`;
+        setText('ec-wq', wqLabel);
+
+        // Erasure Set 구성
+        let setLabel;
+        if (result.erasureSetCount === 0) {
+            setLabel = '⚠️ Set 구성 불가';
+        } else if (result.remainingDrives > 0) {
+            setLabel = `${result.erasureSetCount}개 + 미사용 ${result.remainingDrives}드라이브 ⚠️`;
+        } else {
+            setLabel = result.erasureSetCount > 1
+                ? `${result.erasureSetCount}개 Set (총 ${result.totalDrives}드라이브)`
+                : `단일 Set (${result.totalDrives}드라이브)`;
+        }
+        setText('ec-set', setLabel);
+    }
+
+    function renderMemory(result) {
+        // KPI
+        const clusterReq = Math.round(result.maxConcurrentReqCluster).toLocaleString();
+        const nodeReq    = Math.round(result.maxConcurrentReqPerNode).toLocaleString();
+        setText('kpi-concurrent',      clusterReq + ' req');
+        setText('kpi-concurrent-node', `노드당 ${nodeReq}`);
+        // 세부
+        setText('mem-req-node',    nodeReq + ' req/node');
+        setText('mem-req-cluster', clusterReq + ' req');
+        setText('mem-ratio',       result.ratioVsRecommended.toFixed(0) + '%');
+    }
+
+    function renderWarnings(warnings) {
+        const list = document.getElementById('warning-list');
+        list.innerHTML = '';
+        const ICON  = { ok: '✅', warning: '⚠️', critical: '❌' };
+        const COLOR = {
+            ok:       'bg-green-50 border border-green-200 text-green-800',
+            warning:  'bg-amber-50 border border-amber-200 text-amber-800',
+            critical: 'bg-red-50   border border-red-200   text-red-800',
+        };
+        warnings.forEach(w => {
+            const li = document.createElement('li');
+            li.className = `flex gap-2.5 px-3 py-2.5 rounded-xl text-sm ${COLOR[w.level]}`;
+            li.innerHTML =
+                `<span class="flex-shrink-0 mt-0.5">${ICON[w.level]}</span>` +
+                `<span class="min-w-0"><span class="font-semibold">${w.item}</span>` +
+                `<span class="mx-1 opacity-30">—</span>` +
+                `<span class="warn-message">${w.message}</span></span>`;
+            list.appendChild(li);
+        });
+    }
+
+    function renderSummary(input, result) {
+        setText('sum-nodes',      input.nodeCount + '대');
+        setText('sum-drives',     `${input.drivesPerNode}EA × ${input.driveSizeTB}TB`);
+        setText('sum-drive-type', `${input.driveType} / ${input.raidType}`);
+        setText('sum-raw',        result.totalRawTB.toFixed(2) + ' TiB');
+        setText('sum-eff-raw',    result.effectiveRawTB.toFixed(2) + ' TiB');
+        setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
+        setText('sum-nic',        input.nicGbps + 'G');
+        setText('sum-net',        result.clusterThroughputGBps.toFixed(2) + ' GBps');
+        setText('sum-ram',        input.ramGiB + ' GiB/노드');
+        setText('sum-concurrent', Math.round(result.maxConcurrentReqPerNode).toLocaleString() + ' req/노드');
+
+        const hasCritical = result.warnings.some(w => w.level === 'critical');
+        const hasWarning  = result.warnings.some(w => w.level === 'warning');
+        const statusEl    = document.getElementById('sum-status');
+        if (hasCritical) {
+            statusEl.textContent = '❌ 심각한 구성 문제가 있습니다. 경고 항목을 확인하세요.';
+            statusEl.className   = 'mt-4 pt-4 border-t border-gray-100 text-sm font-semibold text-center text-red-600 rounded-xl bg-red-50 py-2.5';
+        } else if (hasWarning) {
+            statusEl.textContent = '⚠️ 일부 항목이 공식 권고 기준에 미달합니다.';
+            statusEl.className   = 'mt-4 pt-4 border-t border-gray-100 text-sm font-semibold text-center text-amber-700 rounded-xl bg-amber-50 py-2.5';
+        } else {
+            statusEl.textContent = '✅ 모든 항목 공식 권고 기준 충족';
+            statusEl.className   = 'mt-4 pt-4 border-t border-gray-100 text-sm font-semibold text-center text-emerald-700 rounded-xl bg-emerald-50 py-2.5';
+        }
+    }
+
+    function renderEcInfo(result) {
+        const lines = [
+            `<span class="font-bold text-gray-800">Data ${result.dataShards}</span> / <span class="font-bold text-gray-800">Parity ${result.parityShards}</span>`,
+            `장애허용: 최대 <strong>${result.driveFailureTolerance}</strong>드라이브`,
+            `Usable 효율: <strong>${result.storageEfficiencyPct.toFixed(1)}%</strong>`,
+            `Write Quorum: <strong>${result.writeQuorum}</strong>드라이브 <span class="text-gray-400">/ Read: ${result.readQuorum}</span>`,
+        ];
+        if (result.erasureSetCount === 0) {
+            lines.push(`<span class="text-amber-700 font-medium">⚠️ 전체 드라이브(${result.totalDrives})가 Stripe Size보다 작아 Set 구성 불가</span>`);
+        } else if (result.remainingDrives > 0) {
+            lines.push(`<span class="text-amber-700 font-medium">⚠️ Set <strong>${result.erasureSetCount}개</strong> + 미사용 <strong>${result.remainingDrives}</strong>드라이브</span>`);
+        } else {
+            const label = result.erasureSetCount > 1 ? `Set <strong>${result.erasureSetCount}개</strong> (다중)` : `Set <strong>1개</strong>`;
+            lines.push(`<span class="text-gray-500">${label} — 전체 ${result.totalDrives}드라이브 모두 사용</span>`);
+        }
+        if (result.isMaxParity) {
+            lines.push(`<span class="text-amber-700 font-medium">⚠️ 최대 Parity: Write Quorum K+1 (${result.writeQuorum}드라이브), 장애허용 ${result.driveFailureTolerance}개</span>`);
+        }
+        document.getElementById('ec-info').innerHTML = lines.join('<br>');
+    }
+
+    // ── 차트 ─────────────────────────────────────────
+
+    let _chartStorage = null, _chartParity = null;
+
+    function renderCharts(input, result) {
+        renderStorageBreakdownChart(result);
+        renderParityComparisonChart(input, result);
+    }
+
+    function renderStorageBreakdownChart(result) {
+        const ctx = document.getElementById('chart-storage').getContext('2d');
+        if (_chartStorage) { _chartStorage.destroy(); _chartStorage = null; }
+        const raidLoss = result.totalRawTB - result.effectiveRawTB;
+        const ecLoss   = result.effectiveRawTB - result.usableTB;
+        const usable   = result.usableTB;
+        const total    = result.totalRawTB;
+        const pct = v => ((v / total) * 100).toFixed(1);
+        const datasets = [
+            { label: `Usable  ${pct(usable)}%`,  data: [usable],  backgroundColor: 'rgba(16,185,129,0.8)',  borderColor: 'rgba(16,185,129,1)',  borderWidth: 0, borderRadius: 4 },
+            { label: `EC 손실  ${pct(ecLoss)}%`, data: [ecLoss],  backgroundColor: 'rgba(251,146,60,0.8)', borderColor: 'rgba(251,146,60,1)', borderWidth: 0, borderRadius: 4 },
+        ];
+        if (raidLoss > 0.001) datasets.push({ label: `RAID 손실  ${pct(raidLoss)}%`, data: [raidLoss], backgroundColor: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,1)', borderWidth: 0, borderRadius: 4 });
+        _chartStorage = new Chart(ctx, {
+            type: 'bar', data: { labels: [''], datasets },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12, boxWidth: 10, boxHeight: 10 } },
+                    tooltip: { callbacks: { label: c => ` ${c.dataset.label.split('  ')[0]}: ${c.raw.toFixed(2)} TiB` } },
+                },
+                scales: {
+                    x: { stacked: true, ticks: { callback: v => v.toFixed(0) + ' T', font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.04)' } },
+                    y: { stacked: true, display: false },
+                },
+            },
+        });
+    }
+
+    function renderParityComparisonChart(input, result) {
+        const ctx = document.getElementById('chart-parity').getContext('2d');
+        if (_chartParity) { _chartParity.destroy(); _chartParity = null; }
+        const parityList = Array.from({ length: input.stripeSize / 2 }, (_, i) => i + 1);
+        const effRaw = input.driveSizeTB * input.drivesPerNode * input.nodeCount * CONFIG.raidEfficiency[input.raidType];
+        const usables = parityList.map(p => effRaw * ((input.stripeSize - p) / input.stripeSize));
+        const isCur = p => p === input.parityShards;
+        const h = Math.max(160, parityList.length * 44 + 24);
+        document.getElementById('chart-parity-wrap').style.height = h + 'px';
+        document.getElementById('chart-parity-subtitle').textContent =
+            `Stripe ${input.stripeSize} — 강조(빨간색): 현재 Parity ${input.parityShards} · 괄호 숫자는 장애 허용 드라이브 수`;
+        _chartParity = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                // 라벨: P4 (±4대) — Parity = MaxParity면 M-1, 아니면 M
+                labels: parityList.map(p => {
+                    const isMax = (p === input.stripeSize / 2);
+                    const ft    = isMax ? (p - 1) : p;
+                    return `P${p}  (±${ft}대)`;
+                }),
+                datasets: [{
+                    label: 'Usable', data: usables,
+                    backgroundColor: parityList.map(p => isCur(p) ? 'rgba(239,68,68,0.85)' : 'rgba(148,163,184,0.45)'),
+                    borderColor:     parityList.map(p => isCur(p) ? 'rgba(239,68,68,1)'    : 'rgba(148,163,184,0.7)'),
+                    borderWidth: parityList.map(p => isCur(p) ? 2 : 1), borderRadius: 4,
+                }],
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => { const p = parityList[c.dataIndex]; const eff = (((input.stripeSize-p)/input.stripeSize)*100).toFixed(1); return ` ${formatCapacity(c.raw)} (효율 ${eff}%)`; } } },
+                },
+                scales: {
+                    x: { ticks: { callback: v => formatCapacity(v), font: { size: 10 }, maxTicksLimit: 4 }, grid: { color: 'rgba(0,0,0,0.04)' } },
+                    y: { ticks: { font: { size: 11 } }, grid: { display: false } },
+                },
+            },
+        });
+    }
+
+    /**
+     * Erasure Set 드라이브 그리드 시각화.
+     * 노드(행) × 드라이브(열) 그리드에 Set별 색상 + 미사용 점선 표시.
+     */
+    function renderErasureSetVisual(input, result) {
+        const { nodeCount, drivesPerNode, stripeSize } = input;
+        const { erasureSetCount, remainingDrives, totalDrives } = result;
+
+        // Set 색상 팔레트
+        const PALETTE = ['#10b981','#3b82f6','#8b5cf6','#f59e0b','#06b6d4','#ec4899','#f97316','#14b8a6'];
+
+        // 드라이브 수에 따라 블록 크기 조정
+        const blockPx = drivesPerNode <= 8 ? 24 : drivesPerNode <= 16 ? 18 : drivesPerNode <= 32 ? 13 : 10;
+        const gap      = 3;
+
+        // ── 그리드 HTML 빌드 ──────────────────────────
+        let grid = `<div style="display:inline-grid;
+                        grid-template-columns:auto repeat(${drivesPerNode},${blockPx}px);
+                        gap:${gap}px;align-items:center;min-width:0;">`;
+
+        // 열 헤더 (드라이브 번호)
+        grid += `<div style="font-size:9px;color:#d1d5db;text-align:right;padding-right:4px;">노드</div>`;
+        for (let j = 0; j < drivesPerNode; j++) {
+            grid += `<div style="font-size:9px;color:#9ca3af;text-align:center;line-height:1;">${j + 1}</div>`;
+        }
+
+        // 노드별 드라이브 행
+        for (let i = 0; i < nodeCount; i++) {
+            grid += `<div style="font-size:9px;color:#9ca3af;text-align:right;padding-right:4px;white-space:nowrap;">N${i + 1}</div>`;
+            for (let j = 0; j < drivesPerNode; j++) {
+                const driveIdx = i * drivesPerNode + j;
+                const setIdx   = Math.floor(driveIdx / stripeSize);
+                const isUsed   = setIdx < erasureSetCount;
+                const color    = PALETTE[setIdx % PALETTE.length];
+                const label    = isUsed ? `노드${i+1} · D${j+1} · Set ${setIdx+1}` : `노드${i+1} · D${j+1} · 미사용`;
+                const style    = isUsed
+                    ? `background:${color};opacity:0.82;border-radius:3px;`
+                    : `background:transparent;border:1.5px dashed #d1d5db;border-radius:3px;`;
+                grid += `<div title="${label}" style="width:${blockPx}px;height:${blockPx}px;${style}cursor:default;"></div>`;
+            }
+        }
+        grid += '</div>';
+        document.getElementById('es-grid').innerHTML = grid;
+
+        // ── Set별 Data / Parity 비율 바 ──────────────
+        const dataPct   = (result.dataShards   / stripeSize) * 100;
+        const parityPct = (result.parityShards / stripeSize) * 100;
+
+        let ratio = '';
+        if (erasureSetCount > 0) {
+            // 제목 행
+            ratio += `<div class="flex items-center gap-2 mb-2">
+                <span class="text-xs font-semibold text-gray-500">Set 내 Data / Parity 구성</span>
+                <span class="text-xs text-gray-400">(Parity가 높을수록 보호↑ · 효율↓)</span>
+            </div>`;
+
+            for (let s = 0; s < erasureSetCount; s++) {
+                const color = PALETTE[s % PALETTE.length];
+                // hex → rgba 25% 투명도를 위해 인라인 opacity 사용
+                ratio += `
+                <div class="flex items-center gap-3">
+                    <div style="font-size:11px;color:#6b7280;width:44px;flex-shrink:0;font-weight:500;">Set ${s + 1}</div>
+                    <div style="flex:1;height:22px;border-radius:6px;overflow:hidden;display:flex;min-width:0;background:#f1f5f9;">
+                        <div style="width:${dataPct}%;background:${color};display:flex;align-items:center;justify-content:center;transition:width 0.3s;">
+                            <span style="font-size:10px;color:white;font-weight:700;white-space:nowrap;padding:0 6px;text-shadow:0 1px 2px rgba(0,0,0,0.15);">
+                                Data ${result.dataShards}
+                            </span>
+                        </div>
+                        <div style="width:${parityPct}%;background:${color};opacity:0.35;display:flex;align-items:center;justify-content:center;transition:width 0.3s;">
+                        </div>
+                    </div>
+                    <!-- Parity 레이블은 바 오른쪽에 별도 표시 (바가 좁을 때도 잘 보이도록) -->
+                    <div style="font-size:10px;color:#6b7280;white-space:nowrap;flex-shrink:0;min-width:64px;">
+                        Parity <strong>${result.parityShards}</strong>
+                        <span style="color:#9ca3af;">(${parityPct.toFixed(0)}%)</span>
+                    </div>
+                </div>`;
+            }
+        }
+        document.getElementById('es-ratio').innerHTML = ratio;
+
+        // ── 범례 ─────────────────────────────────────
+        let legend = '';
+        for (let s = 0; s < Math.min(erasureSetCount, PALETTE.length); s++) {
+            legend += `<div class="flex items-center gap-1.5">
+                <div style="width:10px;height:10px;background:${PALETTE[s]};border-radius:2px;flex-shrink:0;"></div>
+                <span class="text-xs text-gray-600">Set ${s + 1} &nbsp;<span class="text-gray-400">(${stripeSize}드라이브)</span></span>
+            </div>`;
+        }
+        if (remainingDrives > 0) {
+            legend += `<div class="flex items-center gap-1.5">
+                <div style="width:10px;height:10px;border:1.5px dashed #d1d5db;border-radius:2px;flex-shrink:0;"></div>
+                <span class="text-xs text-gray-400">미사용 ${remainingDrives}드라이브</span>
+            </div>`;
+        }
+        document.getElementById('es-legend').innerHTML = legend;
+
+        // ── 요약 + 설명 ──────────────────────────────
+        const sumEl  = document.getElementById('es-summary');
+        const descEl = document.getElementById('es-desc');
+
+        if (erasureSetCount === 0) {
+            sumEl.innerHTML = '<span class="text-red-600">⚠️ Set 구성 불가</span>';
+            descEl.textContent = `전체 드라이브 수(${totalDrives})가 Stripe Size(${stripeSize})보다 작아 Erasure Set을 구성할 수 없습니다. Stripe Size를 낮추거나 드라이브/노드 수를 늘려주세요.`;
+        } else if (remainingDrives > 0) {
+            const wastePct = ((remainingDrives / totalDrives) * 100).toFixed(1);
+            sumEl.innerHTML = `<span class="text-amber-600">⚠️ Set ${erasureSetCount}개 &nbsp;+&nbsp; 미사용 ${remainingDrives}드라이브 (${wastePct}% 낭비)</span>`;
+            descEl.textContent = `전체 ${totalDrives}드라이브 중 ${erasureSetCount * stripeSize}드라이브가 Set에 편입됩니다. 나머지 ${remainingDrives}드라이브는 MinIO가 사용하지 않습니다. 드라이브 수를 Stripe Size(${stripeSize})의 배수로 맞추면 낭비 없이 구성됩니다.`;
+        } else if (erasureSetCount > 1) {
+            sumEl.innerHTML = `<span class="text-emerald-600">✅ Set ${erasureSetCount}개 &nbsp;·&nbsp; ${totalDrives}드라이브 전체 사용</span>`;
+            descEl.textContent = `${erasureSetCount}개의 독립 Erasure Set으로 구성됩니다. 각 Set은 서로 독립적으로 장애를 허용하며, Set 경계를 넘는 읽기/쓰기는 여러 Set에 분산됩니다.`;
+        } else {
+            sumEl.innerHTML = `<span class="text-emerald-600">✅ 단일 Set &nbsp;·&nbsp; ${totalDrives}드라이브 전체 사용</span>`;
+            descEl.textContent = `모든 드라이브가 하나의 Erasure Set으로 구성됩니다. Stripe ${stripeSize} 기준 Data ${result.dataShards} + Parity ${result.parityShards} 샤드로 최대 ${result.driveFailureTolerance}드라이브 장애를 허용합니다.`;
+        }
+    }
+
+    function renderResult(input, result) {
+        renderEnvBanner(input.environment);
+        renderStorage(result);
+        renderNetwork(result);
+        renderMemory(result);
+        renderEcResult(result);
+        renderErasureSetVisual(input, result);
+        renderWarnings(result.warnings);
+        renderCharts(input, result);
+        renderSummary(input, result);
+        renderEcInfo(result);
+    }
+
+    function renderEnvBanner(environment) {
+        const banner = document.getElementById('env-banner');
+        if (environment === 'dev') {
+            banner.className = 'rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-800';
+            banner.innerHTML = '<span class="text-base flex-shrink-0">🛠️</span><span><span class="font-semibold">개발(Dev) 환경 기준 적용 중</span><br><span class="font-normal text-blue-700">CPU ≥ 4코어 · RAM ≥ 64 GiB · NIC 기준 없음 · RAID 허용 · HDD 경고 완화. 운영 투입 전 반드시 Production 환경으로 재검토하세요.</span></span>';
+        } else {
+            banner.className = 'hidden'; banner.innerHTML = '';
+        }
+    }
+
+    // ── UI 함수 ─────────────────────────────────────
+
+    function readInputs() {
+        const rawVal = parseFloat(document.getElementById('driveSizeTB').value) || 0.01;
+        const unit   = document.getElementById('driveUnit').value;
+        return {
+            nodeCount:     parseInt(document.getElementById('nodeCount').value)     || 1,
+            environment:   document.querySelector('input[name="environment"]:checked').value,
+            driveType:     document.getElementById('driveType').value,
+            driveSizeTB:   unit === 'GB' ? rawVal / 1000 : rawVal,
+            drivesPerNode: parseInt(document.getElementById('drivesPerNode').value) || 1,
+            raidType:      document.getElementById('raidType').value,
+            stripeSize:    parseInt(document.getElementById('stripeSize').value),
+            parityShards:  parseInt(document.getElementById('parityShards').value),
+            ramGiB:        parseInt(document.getElementById('ramGiB').value),
+            physicalCores: parseInt(document.getElementById('physicalCores').value) || 4,
+            nicGbps:       parseInt(document.getElementById('nicGbps').value),
+        };
+    }
+
+    function onInputChange() {
+        let input = readInputs(); input = validateInput(input);
+        const result = calculate(input); result.warnings = checkWarnings(input, result);
+        renderResult(input, result);
+    }
+
+    function rebuildParityOptions(stripeSize, selectedParity) {
+        document.getElementById('parityShards').innerHTML = buildParityOptions(stripeSize)
+            .map(p => `<option value="${p}"${p === selectedParity ? ' selected' : ''}>${p}</option>`).join('');
+    }
+
+    function setDriveSize(tb) {
+        const unit = document.getElementById('driveUnit').value;
+        document.getElementById('driveSizeTB').value = unit === 'GB' ? (tb * 1000).toFixed(0) : tb;
+        document.querySelectorAll('.drive-preset').forEach(btn => {
+            const active = parseFloat(btn.textContent) === tb;
+            btn.classList.toggle('bg-red-100',    active); btn.classList.toggle('text-red-700',  active);
+            btn.classList.toggle('border-red-300', active); btn.classList.toggle('bg-slate-50', !active);
+            btn.classList.toggle('text-gray-500',  !active); btn.classList.toggle('border-gray-200', !active);
+        });
+        onInputChange();
+    }
+
+    function resetToDefaults() {
+        const d = CONFIG.defaults;
+        document.getElementById('nodeCount').value      = d.nodeCount;
+        document.getElementById('driveType').value      = d.driveType;
+        document.getElementById('driveUnit').value      = 'TB';
+        document.getElementById('driveSizeTB').value    = d.driveSizeTB;
+        document.querySelectorAll('.drive-preset').forEach(btn => {
+            const isDefault = parseFloat(btn.textContent) === d.driveSizeTB;
+            btn.classList.toggle('bg-red-100',    isDefault); btn.classList.toggle('text-red-700',   isDefault);
+            btn.classList.toggle('border-red-300', isDefault); btn.classList.toggle('bg-slate-50',  !isDefault);
+            btn.classList.toggle('text-gray-500',  !isDefault); btn.classList.toggle('border-gray-200', !isDefault);
+        });
+        document.getElementById('drivesPerNode').value  = d.drivesPerNode;
+        document.getElementById('raidType').value       = d.raidType;
+        document.getElementById('stripeSize').value     = d.stripeSize;
+        rebuildParityOptions(d.stripeSize, d.parityShards);
+        document.getElementById('ramGiB').value         = d.ramGiB;
+        document.getElementById('physicalCores').value  = d.physicalCores;
+        document.getElementById('nicGbps').value        = d.nicGbps;
+        const envRadio = document.querySelector(`input[name="environment"][value="${d.environment}"]`);
+        if (envRadio) envRadio.checked = true;
+        onInputChange();
+    }
+
+    function bindEvents() {
+        document.querySelectorAll('select').forEach(el => {
+            if (el.id === 'stripeSize' || el.id === 'driveUnit') return;
+            el.addEventListener('change', onInputChange);
+        });
+        document.querySelectorAll('input[type="radio"]').forEach(el => el.addEventListener('change', onInputChange));
+        document.querySelectorAll('input[type="number"]').forEach(el => {
+            el.addEventListener('blur', onInputChange);
+            el.addEventListener('keydown', e => { if (e.key === 'Enter') onInputChange(); });
+        });
+        document.getElementById('stripeSize').addEventListener('change', function () {
+            const newStripe = parseInt(this.value);
+            rebuildParityOptions(newStripe, clampParity(parseInt(document.getElementById('parityShards').value) || 1, newStripe));
+            onInputChange();
+        });
+        document.getElementById('driveUnit').addEventListener('change', function () {
+            const sizeInput = document.getElementById('driveSizeTB');
+            const val = parseFloat(sizeInput.value) || 0;
+            sizeInput.value = this.value === 'GB' ? (val * 1000).toFixed(0) : (val / 1000).toFixed(2);
+            onInputChange();
+        });
+    }
+
+    // ── 내보내기 ─────────────────────────────────────
+
+    function buildExportText(input, result) {
+        const now  = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+        const ICON = { ok: '✅', warning: '⚠️', critical: '❌' };
+        const hasCritical = result.warnings.some(w => w.level === 'critical');
+        const hasWarning  = result.warnings.some(w => w.level === 'warning');
+        const statusLine  = hasCritical ? '❌ 심각한 구성 문제 있음' : hasWarning ? '⚠️ 일부 항목 권고 기준 미달' : '✅ 모든 항목 공식 권고 기준 충족';
+        const maxParityNote = result.isMaxParity ? `  ⚠️ 최대 Parity 구성: Write Quorum = K+1 (${result.writeQuorum}드라이브), 장애허용 = ${result.driveFailureTolerance}드라이브\n` : null;
+        return [
+            '══════════════════════════════════════════',
+            '  MinIO AIStor 사이징 결과', `  생성일시: ${now}`,
+            `  환경: ${input.environment === 'production' ? '운영 (Production)' : '개발 (Dev)'}`,
+            '══════════════════════════════════════════', '',
+            '■ 클러스터 구성',
+            `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${input.driveSizeTB}TB (${input.driveType}) / RAID: ${input.raidType}`,
+            `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}G`, '',
+            '■ 스토리지 용량',
+            `  총 RAW: ${result.totalRawTB.toFixed(2)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(2)} TiB`,
+            `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${result.usablePerNodeTB.toFixed(2)} TiB`, '',
+            '■ EC 정보',
+            `  Data ${result.dataShards} / Parity ${result.parityShards} / 장애허용: 최대 ${result.driveFailureTolerance}드라이브`,
+            `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
+            maxParityNote, '',
+            '■ 네트워크 / 메모리',
+            `  클러스터 처리량: ${result.clusterThroughputGBps.toFixed(2)} GBps (노드당 ${result.nodeNicThroughputGBps.toFixed(2)} GBps)`,
+            `  클러스터 동시 요청: ${Math.round(result.maxConcurrentReqCluster).toLocaleString()} req (노드당 ${Math.round(result.maxConcurrentReqPerNode).toLocaleString()} req)`,
+            `  권고 기준(256GiB) 대비: ${result.ratioVsRecommended.toFixed(0)}%`, '',
+            '■ 권고 기준 체크리스트',
+            ...result.warnings.map(w => `  ${ICON[w.level]} ${w.item} — ${w.message}`), '',
+            '■ 전체 상태', `  ${statusLine}`, '',
+            '──────────────────────────────────────────',
+            '  MinIO AIStor 사이징 계산기 (공식 EC 계산기 검증 7/7 ✅)',
+            '══════════════════════════════════════════',
+        ].filter(l => l !== null).join('\n');
+    }
+
+    function copyToClipboard() {
+        let input = readInputs(); input = validateInput(input);
+        const result = calculate(input); result.warnings = checkWarnings(input, result);
+        const text = buildExportText(input, result);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => showCopyFeedback(true)).catch(() => fallbackCopy(text));
+        } else { fallbackCopy(text); }
+    }
+
+    function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showCopyFeedback(true); } catch { showCopyFeedback(false); }
+        document.body.removeChild(ta);
+    }
+
+    function showCopyFeedback(success) {
+        const btn = document.getElementById('btn-copy'), original = btn.innerHTML;
+        btn.innerHTML = success
+            ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> 복사 완료!`
+            : `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 복사 실패`;
+        if (success) { btn.classList.add('bg-emerald-500','text-white','border-emerald-500'); btn.classList.remove('bg-white','text-gray-600','border-gray-200'); }
+        setTimeout(() => { btn.innerHTML = original; btn.className = 'flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-semibold transition-colors'; }, 2000);
+    }
+
+    function saveToPdf() { window.print(); }
+
+    // ── 툴팁 ─────────────────────────────────────────
+
+    function initTooltips() {
+        const tip = document.createElement('div'); tip.id = 'js-tooltip';
+        document.body.appendChild(tip);
+        document.querySelectorAll('[data-tooltip]').forEach(el => {
+            el.addEventListener('mouseenter', () => { tip.textContent = el.dataset.tooltip; tip.style.display = 'block'; });
+            el.addEventListener('mousemove',  e  => positionTooltip(e, tip));
+            el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+        });
+    }
+
+    function positionTooltip(e, tip) {
+        const GAP = 12, MARGIN = 8, tipW = tip.offsetWidth || 300, tipH = tip.offsetHeight || 60;
+        let x = e.clientX - tipW / 2, y = e.clientY - tipH - GAP;
+        if (x < MARGIN) x = MARGIN;
+        if (x + tipW > window.innerWidth - MARGIN) x = window.innerWidth - tipW - MARGIN;
+        if (y < MARGIN) y = e.clientY + GAP;
+        const arrowX = Math.max(12, Math.min(tipW - 12, e.clientX - x));
+        tip.style.setProperty('--arrow-x', arrowX + 'px');
+        tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    }
+
+    function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+    // ── 초기화 ───────────────────────────────────────
+
+    // ── 독립 스크롤 — 헤더 높이 기반으로 main 높이 동적 계산 ──
+    function setMainHeight() {
+        if (window.innerWidth < 1024) return;   // lg 미만은 일반 스크롤
+        const headerH = document.querySelector('header').offsetHeight;
+        document.getElementById('app-main').style.height = (window.innerHeight - headerH) + 'px';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setMainHeight();
+        window.addEventListener('resize', setMainHeight);
+        initTooltips();
+        bindEvents();
+        resetToDefaults();
+    });
+
+    window.addEventListener('beforeprint', () => {
+        if (_chartStorage) _chartStorage.resize();
+        if (_chartParity)  _chartParity.resize();
+    });
+    </script>
+</body>
+</html>
