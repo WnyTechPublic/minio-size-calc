@@ -855,11 +855,11 @@
         _chartParity = new Chart(ctx, {
             type: 'bar',
             data: {
-                // 라벨: P4 (±4대) — Parity = MaxParity면 M-1, 아니면 M
+                // 라벨: P4 (최대 4대) — Parity = MaxParity면 M-1, 아니면 M
                 labels: parityList.map(p => {
                     const isMax = (p === input.stripeSize / 2);
                     const ft    = isMax ? (p - 1) : p;
-                    return `P${p}  (±${ft}대)`;
+                    return `P${p}  (최대 ${ft}대)`;
                 }),
                 datasets: [{
                     label: 'Usable', data: usables,
