@@ -650,6 +650,12 @@
         if (tib >= 1024) return (tib / 1024).toFixed(1) + ' PiB';
         return Math.round(tib) + ' TiB';
     }
+    function fmtDriveSize(tb) {
+        const n = parseFloat(tb.toFixed(2));
+        if (n % 1 === 0) return n.toFixed(0);
+        if ((n * 10) % 1 === 0) return n.toFixed(1);
+        return n.toFixed(2);
+    }
     function validateInput(input) {
         input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
         input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
@@ -667,11 +673,11 @@
         setText('kpi-usable',    formatCapacity(result.usableTB));
         setText('kpi-efficiency', `효율 ${result.storageEfficiencyPct.toFixed(1)}%`);
         // 세부
-        setText('storage-raw',      result.totalRawTB.toFixed(2) + ' TiB');
-        setText('storage-eff-raw',  result.effectiveRawTB.toFixed(2) + ' TiB');
+        setText('storage-raw',      result.totalRawTB.toFixed(1) + ' TiB');
+        setText('storage-eff-raw',  result.effectiveRawTB.toFixed(1) + ' TiB');
         setText('storage-usable',   formatCapacity(result.usableTB));
         setText('storage-eff-pct',  result.storageEfficiencyPct.toFixed(1) + '%');
-        setText('storage-per-node', result.usablePerNodeTB.toFixed(2) + ' TiB');
+        setText('storage-per-node', result.usablePerNodeTB.toFixed(1) + ' TiB');
     }
 
     function renderNetwork(result) {
@@ -751,10 +757,10 @@
 
     function renderSummary(input, result) {
         setText('sum-nodes',      input.nodeCount + '대');
-        setText('sum-drives',     `${input.drivesPerNode}EA × ${input.driveSizeTB}TB`);
+        setText('sum-drives',     `${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB`);
         setText('sum-drive-type', `${input.driveType} / ${input.raidType}`);
-        setText('sum-raw',        result.totalRawTB.toFixed(2) + ' TiB');
-        setText('sum-eff-raw',    result.effectiveRawTB.toFixed(2) + ' TiB');
+        setText('sum-raw',        result.totalRawTB.toFixed(1) + ' TiB');
+        setText('sum-eff-raw',    result.effectiveRawTB.toFixed(1) + ' TiB');
         setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
         setText('sum-nic',        input.nicGbps + 'G');
         setText('sum-net',        result.clusterThroughputGBps.toFixed(2) + ' GBps');
@@ -1121,11 +1127,11 @@
             `  환경: ${input.environment === 'production' ? '운영 (Production)' : '개발 (Dev)'}`,
             '══════════════════════════════════════════', '',
             '■ 클러스터 구성',
-            `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${input.driveSizeTB}TB (${input.driveType}) / RAID: ${input.raidType}`,
+            `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB (${input.driveType}) / RAID: ${input.raidType}`,
             `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}G`, '',
             '■ 스토리지 용량',
-            `  총 RAW: ${result.totalRawTB.toFixed(2)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(2)} TiB`,
-            `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${result.usablePerNodeTB.toFixed(2)} TiB`, '',
+            `  총 RAW: ${result.totalRawTB.toFixed(1)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(1)} TiB`,
+            `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${result.usablePerNodeTB.toFixed(1)} TiB`, '',
             '■ EC 정보',
             `  Data ${result.dataShards} / Parity ${result.parityShards} / 장애허용: 최대 ${result.driveFailureTolerance}드라이브`,
             `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
