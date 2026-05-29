@@ -1194,7 +1194,16 @@
         setTimeout(() => { btn.innerHTML = original; btn.className = 'flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-semibold transition-colors'; }, 2000);
     }
 
-    function saveToPdf() { window.print(); }
+    function saveToPdf() {
+        const now = new Date();
+        const yy = String(now.getFullYear()).slice(2);
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const original = document.title;
+        document.title = `MinIO AIStor 사이징 계산기 견적 결과_${yy}.${mm}.${dd}`;
+        window.print();
+        document.title = original;
+    }
 
     // ── 툴팁 ─────────────────────────────────────────
 
