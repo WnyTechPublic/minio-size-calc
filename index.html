@@ -171,7 +171,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 타입</label>
-                                <select id="driveType" class="field-input">
+                                <select id="driveType" class="field-input" onchange="onDriveTypeChange()">
                                     <option value="NVMe">NVMe</option>
                                     <option value="SSD">SSD</option>
                                     <option value="HDD">HDD ⚠️ 비권고</option>
@@ -200,14 +200,8 @@
                                     <option value="GB">GB</option>
                                 </select>
                             </div>
-                            <div class="flex flex-wrap items-center gap-1">
+                            <div id="drive-preset-container" class="flex flex-wrap items-center gap-1">
                                 <span class="text-xs text-gray-400 font-medium">권고:</span>
-                                <button type="button" onclick="setDriveSize(3.84)"   class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">3.84</button>
-                                <button type="button" onclick="setDriveSize(7.68)"   class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">7.68</button>
-                                <button type="button" onclick="setDriveSize(15.36)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">15.36</button>
-                                <button type="button" onclick="setDriveSize(30.72)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">30.72</button>
-                                <button type="button" onclick="setDriveSize(61.44)"  class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">61.44</button>
-                                <button type="button" onclick="setDriveSize(122.88)" class="drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200">122.88</button>
                             </div>
                             <p class="text-xs text-gray-400 mt-1.5">※ 입력값을 TiB 단위로 그대로 처리 (공식 계산기 동일)</p>
                         </div>
@@ -547,6 +541,11 @@
             nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
+        },
+        drivePresets: {
+            NVMe: { sizes: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44], defaultSize: 30.72 },
+            SSD:  { sizes: [1.92, 3.84, 7.68, 15.36],               defaultSize: 7.68  },
+            HDD:  { sizes: [8, 12, 14, 16, 18, 20],                 defaultSize: 16    },
         },
     };
 
@@ -1053,6 +1052,27 @@
             .map(p => `<option value="${p}"${p === selectedParity ? ' selected' : ''}>${p}</option>`).join('');
     }
 
+    function updateDrivePresets(driveType) {
+        const preset = CONFIG.drivePresets[driveType] || CONFIG.drivePresets['NVMe'];
+        const container = document.getElementById('drive-preset-container');
+        container.innerHTML = '<span class="text-xs text-gray-400 font-medium">권고:</span>';
+        preset.sizes.forEach(tb => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'drive-preset px-2 py-0.5 text-xs rounded-md border transition-colors bg-slate-50 text-gray-500 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200';
+            btn.textContent = fmtDriveSize(tb);
+            btn.onclick = () => setDriveSize(tb);
+            container.appendChild(btn);
+        });
+    }
+
+    function onDriveTypeChange() {
+        const driveType = document.getElementById('driveType').value;
+        const preset = CONFIG.drivePresets[driveType] || CONFIG.drivePresets['NVMe'];
+        updateDrivePresets(driveType);
+        setDriveSize(preset.defaultSize);
+    }
+
     function setDriveSize(tb) {
         const unit = document.getElementById('driveUnit').value;
         document.getElementById('driveSizeTB').value = unit === 'GB' ? (tb * 1000).toFixed(0) : tb;
@@ -1217,6 +1237,8 @@
         initTooltips();
         bindEvents();
         resetToDefaults();
+        updateDrivePresets(CONFIG.defaults.driveType);
+        setDriveSize(CONFIG.defaults.driveSizeTB);
     });
 
     window.addEventListener('beforeprint', () => {
