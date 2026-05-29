@@ -612,9 +612,9 @@
         if (t.minNicGbpsWarning === null) {
             w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G — 개발 환경 NIC 기준 적용 안 함` });
         } else if (input.nicGbps < t.minNicGbpsCritical) {
-            w.push({ level: 'critical', item: 'NIC 대역폭', message: `${t.minNicGbpsCritical}G 미만 NIC는 처리량이 심각하게 제한됩니다 (노드당 최대 ${result.nodeNicThroughputGBps.toFixed(2)} GBps). 공식 권고 ${t.minNicGbpsWarning}G 이상으로 교체를 강력 권고합니다.` });
+            w.push({ level: 'critical', item: 'NIC 대역폭', message: `${t.minNicGbpsCritical}G 미만 NIC는 처리량이 심각하게 제한됩니다 (노드당 최대 ${fmtGBps(result.nodeNicThroughputGBps)}). 공식 권고 ${t.minNicGbpsWarning}G 이상으로 교체를 강력 권고합니다.` });
         } else if (input.nicGbps < t.minNicGbpsWarning) {
-            w.push({ level: 'warning', item: 'NIC 대역폭', message: `공식 권고(${t.minNicGbpsWarning}G) 미달. 노드당 처리량 상한: ${result.nodeNicThroughputGBps.toFixed(2)} GBps` });
+            w.push({ level: 'warning', item: 'NIC 대역폭', message: `공식 권고(${t.minNicGbpsWarning}G) 미달. 노드당 처리량 상한: ${fmtGBps(result.nodeNicThroughputGBps)}` });
         } else { w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G ≥ ${t.minNicGbpsWarning}G` }); }
 
         if (input.parityShards < t.minParityHA) {
@@ -655,6 +655,9 @@
         if ((n * 10) % 1 === 0) return n.toFixed(1);
         return n.toFixed(2);
     }
+    function fmtGBps(v) {
+        return parseFloat(v.toFixed(2)) + ' GBps';
+    }
     function validateInput(input) {
         input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
         input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
@@ -680,10 +683,10 @@
     }
 
     function renderNetwork(result) {
-        setText('kpi-throughput',      result.clusterThroughputGBps.toFixed(2) + ' GBps');
-        setText('kpi-throughput-node', `노드당 ${result.nodeNicThroughputGBps.toFixed(2)} GBps`);
-        setText('net-node',    result.nodeNicThroughputGBps.toFixed(2) + ' GBps');
-        setText('net-cluster', result.clusterThroughputGBps.toFixed(2) + ' GBps');
+        setText('kpi-throughput',      fmtGBps(result.clusterThroughputGBps));
+        setText('kpi-throughput-node', `노드당 ${fmtGBps(result.nodeNicThroughputGBps)}`);
+        setText('net-node',    fmtGBps(result.nodeNicThroughputGBps));
+        setText('net-cluster', fmtGBps(result.clusterThroughputGBps));
     }
 
     /** EC 복구 정보 카드 + 데이터 안정성 KPI 갱신 */
@@ -762,7 +765,7 @@
         setText('sum-eff-raw',    result.effectiveRawTB.toFixed(1) + ' TiB');
         setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
         setText('sum-nic',        input.nicGbps + 'G');
-        setText('sum-net',        result.clusterThroughputGBps.toFixed(2) + ' GBps');
+        setText('sum-net',        fmtGBps(result.clusterThroughputGBps));
         setText('sum-ram',        input.ramGiB + ' GiB/노드');
         setText('sum-concurrent', Math.round(result.maxConcurrentReqPerNode).toLocaleString() + ' req/노드');
 
@@ -1069,6 +1072,7 @@
     function onDriveTypeChange() {
         const driveType = document.getElementById('driveType').value;
         const preset = CONFIG.drivePresets[driveType] || CONFIG.drivePresets['NVMe'];
+        document.getElementById('driveSizeTB').step = driveType === 'HDD' ? '1' : '0.01';
         updateDrivePresets(driveType);
         setDriveSize(preset.defaultSize);
     }
@@ -1090,13 +1094,7 @@
         document.getElementById('nodeCount').value      = d.nodeCount;
         document.getElementById('driveType').value      = d.driveType;
         document.getElementById('driveUnit').value      = 'TB';
-        document.getElementById('driveSizeTB').value    = d.driveSizeTB;
-        document.querySelectorAll('.drive-preset').forEach(btn => {
-            const isDefault = parseFloat(btn.textContent) === d.driveSizeTB;
-            btn.classList.toggle('bg-red-100',    isDefault); btn.classList.toggle('text-red-700',   isDefault);
-            btn.classList.toggle('border-red-300', isDefault); btn.classList.toggle('bg-slate-50',  !isDefault);
-            btn.classList.toggle('text-gray-500',  !isDefault); btn.classList.toggle('border-gray-200', !isDefault);
-        });
+        document.getElementById('driveSizeTB').step     = d.driveType === 'HDD' ? '1' : '0.01';
         document.getElementById('drivesPerNode').value  = d.drivesPerNode;
         document.getElementById('raidType').value       = d.raidType;
         document.getElementById('stripeSize').value     = d.stripeSize;
@@ -1106,12 +1104,13 @@
         document.getElementById('nicGbps').value        = d.nicGbps;
         const envRadio = document.querySelector(`input[name="environment"][value="${d.environment}"]`);
         if (envRadio) envRadio.checked = true;
-        onInputChange();
+        updateDrivePresets(d.driveType);
+        setDriveSize(d.driveSizeTB);
     }
 
     function bindEvents() {
         document.querySelectorAll('select').forEach(el => {
-            if (el.id === 'stripeSize' || el.id === 'driveUnit') return;
+            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType') return;
             el.addEventListener('change', onInputChange);
         });
         document.querySelectorAll('input[type="radio"]').forEach(el => el.addEventListener('change', onInputChange));
@@ -1157,7 +1156,7 @@
             `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
             maxParityNote, '',
             '■ 네트워크 / 메모리',
-            `  클러스터 처리량: ${result.clusterThroughputGBps.toFixed(2)} GBps (노드당 ${result.nodeNicThroughputGBps.toFixed(2)} GBps)`,
+            `  클러스터 처리량: ${fmtGBps(result.clusterThroughputGBps)} (노드당 ${fmtGBps(result.nodeNicThroughputGBps)})`,
             `  클러스터 동시 요청: ${Math.round(result.maxConcurrentReqCluster).toLocaleString()} req (노드당 ${Math.round(result.maxConcurrentReqPerNode).toLocaleString()} req)`,
             `  권고 기준(256GiB) 대비: ${result.ratioVsRecommended.toFixed(0)}%`, '',
             '■ 권고 기준 체크리스트',
