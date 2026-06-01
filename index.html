@@ -127,11 +127,13 @@
             #warning-list li:nth-child(n+7) { display: none !important; }
             #target-candidates-list .space-y-1 > div { padding: 1px 0 !important; }
             #sum-status { margin-top: 8px !important; padding: 6px !important; font-size: 10px !important; }
-            #es-grid { max-height: 150px !important; overflow: hidden !important; }
-            #es-ratio, #es-legend, #es-desc { font-size: 8px !important; margin-top: 4px !important; }
-            #chart-storage { display: block !important; height: 130px !important; max-height: 130px !important; }
-            #chart-parity-wrap { display: block !important; height: 150px !important; max-height: 150px !important; min-height: 0 !important; }
-            #chart-parity { height: 150px !important; max-height: 150px !important; }
+            #es-grid, #es-ratio, #es-legend { display: none !important; }
+            #es-desc { font-size: 9px !important; margin-top: 4px !important; }
+            #chart-section { display: block !important; }
+            #chart-section > div { width: 100% !important; margin-bottom: 8px !important; }
+            #chart-storage { display: block !important; height: 190px !important; max-height: 190px !important; }
+            #chart-parity-wrap { display: block !important; height: 230px !important; max-height: 230px !important; min-height: 0 !important; }
+            #chart-parity { height: 230px !important; max-height: 230px !important; }
         }
     </style>
 </head>
@@ -529,7 +531,7 @@
                 </div>
 
                 <!-- 차트 2개 나란히 -->
-                <div class="grid grid-cols-2 gap-4">
+                <div id="chart-section" class="grid grid-cols-2 gap-4">
                     <!-- 차트 1: 스토리지 분해 -->
                     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
                         <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
