@@ -127,14 +127,15 @@
             #warning-list li:nth-child(n+7) { display: none !important; }
             #target-candidates-list .space-y-1 > div { padding: 1px 0 !important; }
             #sum-status { margin-top: 8px !important; padding: 6px !important; font-size: 10px !important; }
-            #chart-section { display: none !important; }
             #es-grid { --drive-block-px: 11px; --drive-gap-px: 2px; overflow: hidden !important; padding-bottom: 0 !important; }
-            #es-ratio { --ratio-bar-height: 14px; margin-top: 6px !important; padding-top: 6px !important; }
+            #es-ratio { display: none !important; }
+            #es-print-ratio { display: block !important; --ratio-bar-height: 16px; margin-top: 6px !important; padding-top: 6px !important; border-top: 1px solid #f3f4f6 !important; }
             #es-ratio > div:first-child { margin-bottom: 4px !important; }
             #es-ratio > div:not(:first-child) { gap: 6px !important; margin-bottom: 3px !important; }
-            #es-ratio span, #es-ratio div, #es-legend span, #es-desc { font-size: 8px !important; }
+            #es-ratio span, #es-ratio div, #es-print-ratio span, #es-print-ratio div, #es-legend span, #es-desc { font-size: 8px !important; }
             #es-legend { gap: 6px !important; margin-top: 6px !important; padding-top: 6px !important; }
             #es-desc { margin-top: 4px !important; line-height: 1.35 !important; }
+            #result-panel #chart-section { display: none !important; }
         }
     </style>
 </head>
@@ -522,6 +523,7 @@
                     <div id="es-grid" class="overflow-x-auto pb-1"></div>
                     <!-- Set별 Data / Parity 비율 바 -->
                     <div id="es-ratio" class="space-y-2 mt-4 pt-3 border-t border-gray-100"></div>
+                    <div id="es-print-ratio" class="hidden"></div>
                     <!-- 범례 -->
                     <div id="es-legend" class="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-50"></div>
                     <!-- 설명 -->
@@ -1298,6 +1300,25 @@
             }
         }
         document.getElementById('es-ratio').innerHTML = ratio;
+
+        const printRatio = erasureSetCount > 0
+            ? `<div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-semibold text-gray-500">Set 내 Data / Parity 구성</span>
+                <span class="text-xs text-gray-400">모든 Set 동일 · Data ${result.dataShards} / Parity ${result.parityShards}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div style="font-size:11px;color:#6b7280;width:52px;flex-shrink:0;font-weight:500;">Set 공통</div>
+                <div style="flex:1;height:var(--ratio-bar-height, 16px);border-radius:5px;overflow:hidden;display:flex;min-width:0;background:#f1f5f9;">
+                    <div style="width:${dataPct}%;background:#10b981;display:flex;align-items:center;justify-content:center;">
+                        <span style="font-size:9px;color:white;font-weight:700;white-space:nowrap;">Data ${result.dataShards} (${dataPct.toFixed(0)}%)</span>
+                    </div>
+                    <div style="width:${parityPct}%;background:#a7f3d0;display:flex;align-items:center;justify-content:center;">
+                        <span style="font-size:9px;color:#065f46;font-weight:700;white-space:nowrap;">Parity ${result.parityShards} (${parityPct.toFixed(0)}%)</span>
+                    </div>
+                </div>
+            </div>`
+            : '';
+        document.getElementById('es-print-ratio').innerHTML = printRatio;
 
         // ── 범례 ─────────────────────────────────────
         let legend = '';
