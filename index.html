@@ -219,19 +219,21 @@
                                 </div>
                                 <div id="drive-model-info" class="text-xs text-gray-500 leading-relaxed"></div>
                             </div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
-                            <div class="flex gap-2 mb-2">
-                                <input id="driveSizeTB" type="number" min="0.01" step="0.01" value="30.72"
-                                    class="field-input flex-1">
-                                <select id="driveUnit" class="field-input w-20 flex-shrink-0">
-                                    <option value="TB" selected>TB</option>
-                                    <option value="GB">GB</option>
-                                </select>
+                            <div id="drive-manual-size-panel">
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
+                                <div class="flex gap-2 mb-2">
+                                    <input id="driveSizeTB" type="number" min="0.01" step="0.01" value="30.72"
+                                        class="field-input flex-1">
+                                    <select id="driveUnit" class="field-input w-20 flex-shrink-0">
+                                        <option value="TB" selected>TB</option>
+                                        <option value="GB">GB</option>
+                                    </select>
+                                </div>
+                                <div id="drive-preset-container" class="flex flex-wrap items-center gap-1">
+                                    <span class="text-xs text-gray-400 font-medium">권고:</span>
+                                </div>
+                                <p class="text-xs text-gray-400 mt-1.5">※ 입력값을 TiB 단위로 그대로 처리 (공식 계산기 동일)</p>
                             </div>
-                            <div id="drive-preset-container" class="flex flex-wrap items-center gap-1">
-                                <span class="text-xs text-gray-400 font-medium">권고:</span>
-                            </div>
-                            <p class="text-xs text-gray-400 mt-1.5">※ 입력값을 TiB 단위로 그대로 처리 (공식 계산기 동일)</p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">노드당 데이터 드라이브 수</label>
@@ -1285,6 +1287,7 @@
         const mode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
         const isCatalog = mode === 'catalog';
         document.getElementById('drive-catalog-panel').classList.toggle('hidden', !isCatalog);
+        document.getElementById('drive-manual-size-panel').classList.toggle('hidden', isCatalog);
         document.getElementById('driveType').disabled = isCatalog;
         document.getElementById('driveSizeTB').readOnly = isCatalog;
         document.getElementById('driveUnit').disabled = isCatalog;
