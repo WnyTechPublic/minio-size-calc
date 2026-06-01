@@ -191,6 +191,34 @@
                             </div>
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">드라이브 선택 방식</label>
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
+                                    <input type="radio" name="driveSelectionMode" value="manual" checked class="accent-red-500">
+                                    <span class="text-sm font-medium text-gray-700">직접 입력</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
+                                    <input type="radio" name="driveSelectionMode" value="catalog" class="accent-red-500">
+                                    <span class="text-sm font-medium text-gray-700">모델 선택</span>
+                                </label>
+                            </div>
+                            <div id="drive-catalog-panel" class="hidden rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-500 mb-1">제조사</label>
+                                        <select id="driveVendor" class="field-input"></select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-500 mb-1">모델</label>
+                                        <select id="driveModel" class="field-input"></select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-500 mb-1">용량</label>
+                                        <select id="driveCatalogCapacity" class="field-input"></select>
+                                    </div>
+                                </div>
+                                <div id="drive-model-info" class="text-xs text-gray-500 leading-relaxed"></div>
+                            </div>
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
                             <div class="flex gap-2 mb-2">
                                 <input id="driveSizeTB" type="number" min="0.01" step="0.01" value="30.72"
@@ -539,14 +567,127 @@
         },
         defaults: {
             nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
+            driveSelectionMode: 'manual', driveVendor: 'Micron', driveModel: '6550 ION',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
         },
         drivePresets: {
-            NVMe: { sizes: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44], defaultSize: 30.72 },
+            NVMe: { sizes: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44, 122.88], defaultSize: 30.72 },
             SSD:  { sizes: [1.92, 3.84, 7.68, 15.36],               defaultSize: 7.68  },
             HDD:  { sizes: [8, 12, 14, 16, 18, 20],                 defaultSize: 16    },
         },
+        driveCatalog: [
+            {
+                vendor: 'Micron',
+                model: '6550 ION',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'TLC',
+                formFactor: 'U.2 / E3.S / E1.S',
+                workload: '고밀도 읽기 중심 / AI 데이터 / 오브젝트 스토리지',
+                capacities: [30.72, 61.44],
+                note: '61.44TB급 고밀도 프로덕션 후보. 30.72TB와 61.44TB 구성이 무난합니다.',
+            },
+            {
+                vendor: 'Micron',
+                model: '6600 ION',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'QLC',
+                formFactor: 'U.2 / E3.S',
+                workload: '초고밀도 / AI / 대용량 오브젝트 스토리지',
+                capacities: [30.72, 61.44, 122.88, 245.76],
+                note: '122.88TB 이상은 초고밀도 QLC 후보입니다. 쓰기 집약 워크로드는 DWPD와 수급을 별도 확인하세요.',
+            },
+            {
+                vendor: 'Solidigm',
+                model: 'D5-P5430',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen4 NVMe',
+                nand: 'QLC',
+                formFactor: 'U.2 / E3.S',
+                workload: '메인스트림 읽기 중심 / 비용 효율',
+                capacities: [3.84, 7.68, 15.36, 30.72],
+                note: '30.72TB 이하의 메인스트림 읽기 중심 구성에 적합합니다.',
+            },
+            {
+                vendor: 'Solidigm',
+                model: 'D5-P5336',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen4 NVMe',
+                nand: 'QLC',
+                formFactor: 'U.2 / E1.L / E3.S',
+                workload: '고밀도 읽기 중심 / 오브젝트 스토리지 / 데이터 레이크',
+                capacities: [7.68, 15.36, 30.72, 61.44, 122.88],
+                note: '61.44TB와 122.88TB급 고밀도 QLC 대표 후보입니다.',
+            },
+            {
+                vendor: 'Samsung',
+                model: 'PM1733a / BM1743',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen4/Gen5 NVMe',
+                nand: 'TLC / QLC',
+                formFactor: 'U.2 / EDSFF',
+                workload: '범용 엔터프라이즈 / 고성능 읽기 중심',
+                capacities: [3.84, 7.68, 15.36, 30.72, 61.44],
+                note: '30.72TB는 널리 쓰기 좋은 표준값이고, BM1743 계열은 61.44TB급까지 확인됩니다.',
+            },
+            {
+                vendor: 'Kioxia',
+                model: 'CM9 Series',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'TLC',
+                formFactor: '2.5-inch / E3.S',
+                workload: '엔터프라이즈 RI/MU / 듀얼포트 스토리지',
+                capacities: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44],
+                note: '엔터프라이즈 스토리지 성격이 강한 Gen5 후보입니다. 30.72TB와 61.44TB가 MinIO 구성에 맞습니다.',
+            },
+            {
+                vendor: 'Seagate',
+                model: 'Nytro 5060',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'TLC',
+                formFactor: 'U.2 / E3.S',
+                workload: '고성능 엔터프라이즈 / 낮은 지연시간',
+                capacities: [3.84, 7.68, 15.36, 30.72],
+                note: '30.72TB 이하의 Gen5 엔터프라이즈 NVMe 후보입니다.',
+            },
+            {
+                vendor: 'SanDisk',
+                model: 'SN655',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'BiCS NAND',
+                formFactor: 'U.3 / E3.S',
+                workload: '읽기 중심 / scale-out / 오브젝트 스토리지',
+                capacities: [3.84, 7.68, 15.36, 30.72, 61.44],
+                note: 'SN655는 61.44TB까지의 읽기 중심 scale-out 후보입니다.',
+            },
+            {
+                vendor: 'SanDisk',
+                model: 'SN670',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen5 NVMe',
+                nand: 'UltraQLC',
+                formFactor: 'U.2',
+                workload: '초고밀도 / 데이터 레이크 / 분석',
+                capacities: [30.72, 61.44, 122.88],
+                note: '122.88TB급 UltraQLC 후보입니다. 대용량 읽기 중심 워크로드에 맞춰 검토하세요.',
+            },
+            {
+                vendor: 'Dell / HPE OEM',
+                model: 'Enterprise NVMe OEM',
+                driveType: 'NVMe',
+                interface: 'PCIe Gen4/Gen5 NVMe',
+                nand: 'TLC / QLC',
+                formFactor: 'U.2 / U.3 / EDSFF',
+                workload: '서버 벤더 인증 구성',
+                capacities: [7.68, 15.36, 30.72, 61.44],
+                note: '실제 구매는 Dell/HPE 인증 SKU로 들어오는 경우가 많습니다. 서버 호환성과 펌웨어 지원을 우선 확인하세요.',
+            },
+        ],
     };
 
     function calculate(input) {
@@ -760,7 +901,9 @@
     function renderSummary(input, result) {
         setText('sum-nodes',      input.nodeCount + '대');
         setText('sum-drives',     `${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB`);
-        setText('sum-drive-type', `${input.driveType} / ${input.raidType}`);
+        setText('sum-drive-type', input.driveSelectionMode === 'catalog'
+            ? `${input.driveLabel} / ${input.raidType}`
+            : `${input.driveType} / ${input.raidType}`);
         setText('sum-raw',        result.totalRawTB.toFixed(1) + ' TiB');
         setText('sum-eff-raw',    result.effectiveRawTB.toFixed(1) + ' TiB');
         setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
@@ -1029,10 +1172,16 @@
     function readInputs() {
         const rawVal = parseFloat(document.getElementById('driveSizeTB').value) || 0.01;
         const unit   = document.getElementById('driveUnit').value;
+        const driveSelectionMode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
+        const selectedDrive = getSelectedCatalogDrive();
         return {
             nodeCount:     parseInt(document.getElementById('nodeCount').value)     || 1,
             environment:   document.querySelector('input[name="environment"]:checked').value,
-            driveType:     document.getElementById('driveType').value,
+            driveSelectionMode,
+            driveVendor:   selectedDrive ? selectedDrive.vendor : null,
+            driveModel:    selectedDrive ? selectedDrive.model : null,
+            driveLabel:    driveSelectionMode === 'catalog' && selectedDrive ? `${selectedDrive.vendor} ${selectedDrive.model}` : '직접 입력',
+            driveType:     driveSelectionMode === 'catalog' && selectedDrive ? selectedDrive.driveType : document.getElementById('driveType').value,
             driveSizeTB:   unit === 'GB' ? rawVal / 1000 : rawVal,
             drivesPerNode: parseInt(document.getElementById('drivesPerNode').value) || 1,
             raidType:      document.getElementById('raidType').value,
@@ -1069,6 +1218,92 @@
         });
     }
 
+    function getCatalogVendors() {
+        return [...new Set(CONFIG.driveCatalog.map(d => d.vendor))];
+    }
+
+    function getCatalogModels(vendor) {
+        return CONFIG.driveCatalog.filter(d => d.vendor === vendor);
+    }
+
+    function getSelectedCatalogDrive() {
+        const vendor = document.getElementById('driveVendor')?.value;
+        const model  = document.getElementById('driveModel')?.value;
+        return CONFIG.driveCatalog.find(d => d.vendor === vendor && d.model === model) || null;
+    }
+
+    function populateDriveVendors(selectedVendor = CONFIG.defaults.driveVendor) {
+        const vendorSelect = document.getElementById('driveVendor');
+        const vendors = getCatalogVendors();
+        vendorSelect.innerHTML = vendors.map(v => `<option value="${v}"${v === selectedVendor ? ' selected' : ''}>${v}</option>`).join('');
+        populateDriveModels(vendorSelect.value, CONFIG.defaults.driveModel);
+    }
+
+    function populateDriveModels(vendor, selectedModel) {
+        const modelSelect = document.getElementById('driveModel');
+        const models = getCatalogModels(vendor);
+        const fallbackModel = models[0]?.model;
+        const modelValue = models.some(m => m.model === selectedModel) ? selectedModel : fallbackModel;
+        modelSelect.innerHTML = models.map(d => `<option value="${d.model}"${d.model === modelValue ? ' selected' : ''}>${d.model}</option>`).join('');
+        populateDriveCapacities(modelValue);
+    }
+
+    function populateDriveCapacities(model, selectedCapacity) {
+        const drive = getSelectedCatalogDrive() || CONFIG.driveCatalog.find(d => d.model === model);
+        const capacitySelect = document.getElementById('driveCatalogCapacity');
+        if (!drive) return;
+        const capacityValue = drive.capacities.includes(selectedCapacity)
+            ? selectedCapacity
+            : drive.capacities.includes(CONFIG.defaults.driveSizeTB) ? CONFIG.defaults.driveSizeTB : drive.capacities[0];
+        capacitySelect.innerHTML = drive.capacities
+            .map(c => `<option value="${c}"${c === capacityValue ? ' selected' : ''}>${fmtDriveSize(c)} TB</option>`)
+            .join('');
+        renderDriveModelInfo(drive);
+    }
+
+    function syncDriveCatalogUi() {
+        const mode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
+        const isCatalog = mode === 'catalog';
+        document.getElementById('drive-catalog-panel').classList.toggle('hidden', !isCatalog);
+        document.getElementById('driveType').disabled = isCatalog;
+        document.getElementById('driveSizeTB').readOnly = isCatalog;
+        document.getElementById('driveUnit').disabled = isCatalog;
+        if (isCatalog) applySelectedCatalogDrive();
+    }
+
+    function applySelectedCatalogDrive() {
+        const drive = getSelectedCatalogDrive();
+        if (!drive) return;
+        const capacity = parseFloat(document.getElementById('driveCatalogCapacity').value) || drive.capacities[0];
+        document.getElementById('driveType').value = drive.driveType;
+        document.getElementById('driveSizeTB').step = '0.01';
+        document.getElementById('driveUnit').value = 'TB';
+        setDriveSizeValue(capacity);
+        renderDriveModelInfo(drive);
+    }
+
+    function setDriveSizeValue(tb) {
+        const unit = document.getElementById('driveUnit').value;
+        document.getElementById('driveSizeTB').value = unit === 'GB' ? (tb * 1000).toFixed(0) : tb;
+        updateDrivePresetState(tb);
+    }
+
+    function updateDrivePresetState(tb) {
+        document.querySelectorAll('.drive-preset').forEach(btn => {
+            const active = parseFloat(btn.textContent) === tb;
+            btn.classList.toggle('bg-red-100',    active); btn.classList.toggle('text-red-700',  active);
+            btn.classList.toggle('border-red-300', active); btn.classList.toggle('bg-slate-50', !active);
+            btn.classList.toggle('text-gray-500',  !active); btn.classList.toggle('border-gray-200', !active);
+        });
+    }
+
+    function renderDriveModelInfo(drive) {
+        document.getElementById('drive-model-info').innerHTML =
+            `<span class="font-semibold text-gray-700">${drive.interface}</span>` +
+            ` · ${drive.formFactor} · ${drive.nand} · ${drive.workload}<br>` +
+            `<span class="text-gray-400">${drive.note}</span>`;
+    }
+
     function onDriveTypeChange() {
         const driveType = document.getElementById('driveType').value;
         const preset = CONFIG.drivePresets[driveType] || CONFIG.drivePresets['NVMe'];
@@ -1078,20 +1313,20 @@
     }
 
     function setDriveSize(tb) {
-        const unit = document.getElementById('driveUnit').value;
-        document.getElementById('driveSizeTB').value = unit === 'GB' ? (tb * 1000).toFixed(0) : tb;
-        document.querySelectorAll('.drive-preset').forEach(btn => {
-            const active = parseFloat(btn.textContent) === tb;
-            btn.classList.toggle('bg-red-100',    active); btn.classList.toggle('text-red-700',  active);
-            btn.classList.toggle('border-red-300', active); btn.classList.toggle('bg-slate-50', !active);
-            btn.classList.toggle('text-gray-500',  !active); btn.classList.toggle('border-gray-200', !active);
-        });
+        document.querySelector('input[name="driveSelectionMode"][value="manual"]').checked = true;
+        syncDriveCatalogUi();
+        setDriveSizeValue(tb);
         onInputChange();
     }
 
     function resetToDefaults() {
         const d = CONFIG.defaults;
         document.getElementById('nodeCount').value      = d.nodeCount;
+        document.querySelector(`input[name="driveSelectionMode"][value="${d.driveSelectionMode}"]`).checked = true;
+        populateDriveVendors(d.driveVendor);
+        document.getElementById('driveVendor').value = d.driveVendor;
+        populateDriveModels(d.driveVendor, d.driveModel);
+        populateDriveCapacities(d.driveModel, d.driveSizeTB);
         document.getElementById('driveType').value      = d.driveType;
         document.getElementById('driveUnit').value      = 'TB';
         document.getElementById('driveSizeTB').step     = d.driveType === 'HDD' ? '1' : '0.01';
@@ -1105,15 +1340,24 @@
         const envRadio = document.querySelector(`input[name="environment"][value="${d.environment}"]`);
         if (envRadio) envRadio.checked = true;
         updateDrivePresets(d.driveType);
-        setDriveSize(d.driveSizeTB);
+        setDriveSizeValue(d.driveSizeTB);
+        syncDriveCatalogUi();
+        onInputChange();
     }
 
     function bindEvents() {
+        populateDriveVendors();
         document.querySelectorAll('select').forEach(el => {
-            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType') return;
+            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity') return;
             el.addEventListener('change', onInputChange);
         });
-        document.querySelectorAll('input[type="radio"]').forEach(el => el.addEventListener('change', onInputChange));
+        document.querySelectorAll('input[type="radio"]').forEach(el => {
+            if (el.name !== 'driveSelectionMode') el.addEventListener('change', onInputChange);
+        });
+        document.querySelectorAll('input[name="driveSelectionMode"]').forEach(el => el.addEventListener('change', () => {
+            syncDriveCatalogUi();
+            onInputChange();
+        }));
         document.querySelectorAll('input[type="number"]').forEach(el => {
             el.addEventListener('blur', onInputChange);
             el.addEventListener('keydown', e => { if (e.key === 'Enter') onInputChange(); });
@@ -1127,6 +1371,20 @@
             const sizeInput = document.getElementById('driveSizeTB');
             const val = parseFloat(sizeInput.value) || 0;
             sizeInput.value = this.value === 'GB' ? (val * 1000).toFixed(0) : (val / 1000).toFixed(2);
+            onInputChange();
+        });
+        document.getElementById('driveVendor').addEventListener('change', function () {
+            populateDriveModels(this.value);
+            applySelectedCatalogDrive();
+            onInputChange();
+        });
+        document.getElementById('driveModel').addEventListener('change', function () {
+            populateDriveCapacities(this.value);
+            applySelectedCatalogDrive();
+            onInputChange();
+        });
+        document.getElementById('driveCatalogCapacity').addEventListener('change', function () {
+            applySelectedCatalogDrive();
             onInputChange();
         });
     }
@@ -1147,6 +1405,7 @@
             '══════════════════════════════════════════', '',
             '■ 클러스터 구성',
             `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB (${input.driveType}) / RAID: ${input.raidType}`,
+            `  드라이브 모델: ${input.driveLabel || '직접 입력'}`,
             `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}G`, '',
             '■ 스토리지 용량',
             `  총 RAW: ${result.totalRawTB.toFixed(1)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(1)} TiB`,
@@ -1245,8 +1504,6 @@
         initTooltips();
         bindEvents();
         resetToDefaults();
-        updateDrivePresets(CONFIG.defaults.driveType);
-        setDriveSize(CONFIG.defaults.driveSizeTB);
     });
 
     window.addEventListener('beforeprint', () => {
@@ -1256,3 +1513,4 @@
     </script>
 </body>
 </html>
+
