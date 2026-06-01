@@ -377,20 +377,6 @@
                     <div id="target-candidates-list" class="grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
                 </div>
 
-                <!-- EC 추천 후보 -->
-                <div id="target-ec-card" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <div class="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                                <span class="text-base">🛡️</span> EC:N 추천
-                            </h3>
-                            <p id="target-ec-subtitle" class="text-xs text-gray-400 mt-0.5"></p>
-                        </div>
-                        <div id="target-ec-badge" class="text-xs font-semibold text-amber-600 flex-shrink-0"></div>
-                    </div>
-                    <div id="target-ec-list" class="grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
-                </div>
-
                 <!-- KPI 3개 -->
                 <div class="grid grid-cols-3 gap-3">
                     <!-- KPI 1: EC Usable — 스토리지 효율 -->
@@ -411,6 +397,24 @@
                         <div id="kpi-throughput" class="kpi-value text-blue-700">—</div>
                         <div id="kpi-throughput-node" class="kpi-sub text-blue-500">노드당 — GBps</div>
                     </div>
+                </div>
+
+                <!-- EC 추천 후보 -->
+                <div id="target-ec-card" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <details>
+                        <summary class="cursor-pointer list-none">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                                        <span class="text-base">🛡️</span> EC:N 비교
+                                    </h3>
+                                    <p id="target-ec-subtitle" class="text-xs text-gray-400 mt-0.5"></p>
+                                </div>
+                                <div id="target-ec-badge" class="text-xs font-semibold text-amber-600 flex-shrink-0"></div>
+                            </div>
+                        </summary>
+                        <div id="target-ec-list" class="grid grid-cols-1 xl:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100"></div>
+                    </details>
                 </div>
 
                 <!-- 스토리지 + 시스템 스펙 2열 -->
@@ -1320,7 +1324,7 @@
         }
 
         card.classList.remove('hidden');
-        setText('target-candidates-subtitle', `목표 ${formatCapacity(input.targetUsableTB)} 이상 · ${input.stripeSize}드라이브 Stripe 배수 구성만 추천`);
+        setText('target-candidates-subtitle', `추천 A안을 현재 결과에 적용합니다. 목표 ${formatCapacity(input.targetUsableTB)} 이상 · ${input.stripeSize}드라이브 Stripe 배수 구성 기준`);
         setText('target-candidates-badge', candidates.length ? `상위 ${candidates.length}개` : '후보 없음');
 
         const list = document.getElementById('target-candidates-list');
@@ -1332,9 +1336,18 @@
         list.innerHTML = candidates.map((c, idx) => {
             const label = idx === 0 ? '추천 A안' : `${String.fromCharCode(65 + idx)}안`;
             const accent = idx === 0 ? 'border-red-200 bg-red-50/50' : 'border-gray-200 bg-white';
+            const neededRawTB = input.targetUsableTB / (c.result.dataShards / input.stripeSize);
+            const neededDriveCount = Math.ceil(neededRawTB / input.driveSizeTB);
+            const roundedDriveCount = c.result.totalDrives;
+            const appliedBadge = idx === 0
+                ? '<span class="text-[11px] font-bold text-white bg-red-500 rounded-md px-1.5 py-0.5">현재 적용 중</span>'
+                : '';
+            const roundNote = idx === 0 && roundedDriveCount > neededDriveCount
+                ? `<div class="mt-2 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">목표 달성에는 약 ${neededDriveCount}개 드라이브가 필요하지만, Stripe ${input.stripeSize} 배수 구성을 위해 ${roundedDriveCount}개로 올림했습니다.</div>`
+                : '';
             return `<div class="rounded-xl border ${accent} p-3">
                 <div class="flex items-center justify-between gap-2 mb-2">
-                    <span class="text-sm font-bold text-gray-800">${label}</span>
+                    <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0">${label}${appliedBadge}</span>
                     <span class="text-xs font-semibold text-red-600">+${c.surplusPct.toFixed(1)}%</span>
                 </div>
                 <div class="text-sm font-semibold text-gray-700 mb-1">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브</div>
@@ -1344,6 +1357,7 @@
                     <div class="flex justify-between gap-2"><span>여유 용량</span><strong class="text-gray-700">${formatCapacity(c.surplusTB)}</strong></div>
                     <div class="flex justify-between gap-2"><span>Erasure Set</span><strong class="text-gray-700">${c.result.erasureSetCount}개</strong></div>
                 </div>
+                ${roundNote}
             </div>`;
         }).join('');
     }
@@ -1356,8 +1370,8 @@
         }
 
         card.classList.remove('hidden');
-        setText('target-ec-subtitle', `현재 목표/드라이브 조건에서 EC Parity별 추천 구성을 비교합니다.`);
-        setText('target-ec-badge', recommendations.length ? `추천 EC:${recommendations[0].parity}` : '후보 없음');
+        setText('target-ec-subtitle', `적용된 결과를 먼저 확인한 뒤 EC별 보호/효율 차이를 비교합니다.`);
+        setText('target-ec-badge', recommendations.length ? `비교 추천 EC:${recommendations[0].parity}` : '후보 없음');
 
         const list = document.getElementById('target-ec-list');
         if (!recommendations.length) {
