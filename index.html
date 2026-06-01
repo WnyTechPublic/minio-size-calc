@@ -89,21 +89,45 @@
 
         /* @media print */
         @media print {
-            @page { margin: 15mm 12mm; size: A4 portrait; }
-            #input-panel, .no-print, footer { display: none !important; }
-            /* 인쇄 시 독립 스크롤 해제 — 전체 내용 출력 */
-            body { overflow: visible !important; }
-            #app-main { height: auto !important; overflow: visible !important; }
-            #input-panel, #result-panel { overflow: visible !important; height: auto !important; }
-            main > div { display: block !important; }
-            #result-panel { display: block !important; width: 100% !important; }
+            @page { margin: 12mm; size: A4 portrait; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            body { background: white !important; }
-            .shadow-sm { box-shadow: none !important; }
-            .bg-white { break-inside: avoid; }
-            header { position: static !important; }
-            #chart-storage { height: 140px !important; }
-            #chart-parity-wrap { height: auto !important; min-height: 120px; }
+            body { background: white !important; overflow: visible !important; font-size: 10px !important; color: #111827 !important; }
+            header { position: static !important; border: 0 !important; box-shadow: none !important; }
+            header > div { max-width: none !important; padding: 0 0 8px 0 !important; border-bottom: 1px solid #e5e7eb !important; }
+            header h1 { font-size: 15px !important; }
+            #app-main { height: auto !important; overflow: visible !important; }
+            main > div { display: block !important; max-width: none !important; }
+            #input-panel, .no-print, footer,
+            #target-ec-card, #env-banner, #es-grid, #es-ratio, #es-legend, #es-desc,
+            #chart-storage, #chart-parity-wrap { display: none !important; }
+            #result-panel { display: block !important; width: 100% !important; height: auto !important; overflow: visible !important; padding: 12px 0 0 0 !important; }
+            #result-panel > * { margin-bottom: 8px !important; }
+            #target-candidates-card, #result-panel .bg-white, .kpi-card {
+                border: 1px solid #e5e7eb !important;
+                border-radius: 6px !important;
+                box-shadow: none !important;
+                break-inside: avoid !important;
+                padding: 10px !important;
+                background: white !important;
+            }
+            #target-candidates-list { display: block !important; }
+            #target-candidates-list > div:not(:first-child) { display: none !important; }
+            #target-candidates-list > div:first-child { border-color: #fecaca !important; background: #fff7f7 !important; }
+            #target-candidates-card h3, #result-panel h3 { font-size: 10px !important; margin-bottom: 6px !important; }
+            #target-candidates-card p, #target-candidates-badge { font-size: 9px !important; }
+            #result-panel .grid { gap: 8px !important; }
+            #result-panel .grid-cols-3 { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            #result-panel .grid-cols-2 { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            .kpi-card { padding: 8px !important; }
+            .kpi-label { font-size: 8px !important; margin-bottom: 2px !important; }
+            .kpi-value { font-size: 18px !important; }
+            .kpi-sub { font-size: 9px !important; }
+            .result-row { padding: 4px 0 !important; gap: 8px !important; }
+            .result-label, .result-value, .sum-value, #warning-list li { font-size: 9px !important; }
+            #warning-list li { padding: 6px 8px !important; }
+            #warning-list li:nth-child(n+7) { display: none !important; }
+            #target-candidates-list .space-y-1 > div { padding: 1px 0 !important; }
+            #sum-status { margin-top: 8px !important; padding: 6px !important; font-size: 10px !important; }
         }
     </style>
 </head>
