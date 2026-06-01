@@ -595,6 +595,7 @@
                 formFactor: 'U.2 / E3.S / E1.S',
                 workload: '고밀도 읽기 중심 / AI 데이터 / 오브젝트 스토리지',
                 capacities: [30.72, 61.44],
+                selectionTags: ['Gen5', 'TLC', '고밀도 표준'],
                 note: '61.44TB급 고밀도 프로덕션 후보. 30.72TB와 61.44TB 구성이 무난합니다.',
             },
             {
@@ -606,6 +607,7 @@
                 formFactor: 'U.2 / E3.S',
                 workload: '초고밀도 / AI / 대용량 오브젝트 스토리지',
                 capacities: [30.72, 61.44, 122.88, 245.76],
+                selectionTags: ['Gen5', 'QLC', '초고밀도'],
                 note: '122.88TB 이상은 초고밀도 QLC 후보입니다. 쓰기 집약 워크로드는 DWPD와 수급을 별도 확인하세요.',
             },
             {
@@ -617,6 +619,7 @@
                 formFactor: 'U.2 / E3.S',
                 workload: '메인스트림 읽기 중심 / 비용 효율',
                 capacities: [3.84, 7.68, 15.36, 30.72],
+                selectionTags: ['Gen4', 'QLC', '비용 효율'],
                 note: '30.72TB 이하의 메인스트림 읽기 중심 구성에 적합합니다.',
             },
             {
@@ -628,6 +631,7 @@
                 formFactor: 'U.2 / E1.L / E3.S',
                 workload: '고밀도 읽기 중심 / 오브젝트 스토리지 / 데이터 레이크',
                 capacities: [7.68, 15.36, 30.72, 61.44, 122.88],
+                selectionTags: ['Gen4', 'QLC', '122TB급'],
                 note: '61.44TB와 122.88TB급 고밀도 QLC 대표 후보입니다.',
             },
             {
@@ -639,6 +643,7 @@
                 formFactor: 'U.2 / EDSFF',
                 workload: '범용 엔터프라이즈 / 고성능 읽기 중심',
                 capacities: [3.84, 7.68, 15.36, 30.72, 61.44],
+                selectionTags: ['시장 선도', '범용 엔터프라이즈', '고성능'],
                 note: '30.72TB는 널리 쓰기 좋은 표준값이고, BM1743 계열은 61.44TB급까지 확인됩니다.',
             },
             {
@@ -650,6 +655,7 @@
                 formFactor: '2.5-inch / E3.S',
                 workload: '엔터프라이즈 RI/MU / 듀얼포트 스토리지',
                 capacities: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44],
+                selectionTags: ['Gen5', 'TLC', '엔터프라이즈 RI/MU'],
                 note: '엔터프라이즈 스토리지 성격이 강한 Gen5 후보입니다. 30.72TB와 61.44TB가 MinIO 구성에 맞습니다.',
             },
             {
@@ -661,6 +667,7 @@
                 formFactor: 'U.2 / E3.S',
                 workload: '고성능 엔터프라이즈 / 낮은 지연시간',
                 capacities: [3.84, 7.68, 15.36, 30.72],
+                selectionTags: ['Gen5', 'TLC', '저지연'],
                 note: '30.72TB 이하의 Gen5 엔터프라이즈 NVMe 후보입니다.',
             },
             {
@@ -672,6 +679,7 @@
                 formFactor: 'U.3 / E3.S',
                 workload: '읽기 중심 / scale-out / 오브젝트 스토리지',
                 capacities: [3.84, 7.68, 15.36, 30.72, 61.44],
+                selectionTags: ['Gen5', '읽기 중심', 'Scale-out'],
                 note: 'SN655는 61.44TB까지의 읽기 중심 scale-out 후보입니다.',
             },
             {
@@ -683,6 +691,7 @@
                 formFactor: 'U.2',
                 workload: '초고밀도 / 데이터 레이크 / 분석',
                 capacities: [30.72, 61.44, 122.88],
+                selectionTags: ['UltraQLC', '초고밀도', '데이터 레이크'],
                 note: '122.88TB급 UltraQLC 후보입니다. 대용량 읽기 중심 워크로드에 맞춰 검토하세요.',
             },
             {
@@ -694,6 +703,7 @@
                 formFactor: 'U.2 / U.3 / EDSFF',
                 workload: '서버 벤더 인증 구성',
                 capacities: [7.68, 15.36, 30.72, 61.44],
+                selectionTags: ['OEM 인증', '서버 호환성', '조달 후보'],
                 note: '실제 구매는 Dell/HPE 인증 SKU로 들어오는 경우가 많습니다. 서버 호환성과 펌웨어 지원을 우선 확인하세요.',
             },
         ],
@@ -1308,7 +1318,11 @@
     }
 
     function renderDriveModelInfo(drive) {
+        const tags = (drive.selectionTags || [])
+            .map(tag => `<span class="inline-flex items-center rounded-md border border-red-100 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">${tag}</span>`)
+            .join('');
         document.getElementById('drive-model-info').innerHTML =
+            `<div class="flex flex-wrap gap-1 mb-1">${tags}</div>` +
             `<span class="font-semibold text-gray-700">${drive.interface}</span>` +
             ` · ${drive.formFactor} · ${drive.nand} · ${drive.workload}<br>` +
             `<span class="text-gray-400">${drive.note}</span>`;
