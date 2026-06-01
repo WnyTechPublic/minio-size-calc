@@ -377,6 +377,20 @@
                     <div id="target-candidates-list" class="grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
                 </div>
 
+                <!-- EC 추천 후보 -->
+                <div id="target-ec-card" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                                <span class="text-base">🛡️</span> EC:N 추천
+                            </h3>
+                            <p id="target-ec-subtitle" class="text-xs text-gray-400 mt-0.5"></p>
+                        </div>
+                        <div id="target-ec-badge" class="text-xs font-semibold text-amber-600 flex-shrink-0"></div>
+                    </div>
+                    <div id="target-ec-list" class="grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
+                </div>
+
                 <!-- KPI 3개 -->
                 <div class="grid grid-cols-3 gap-3">
                     <!-- KPI 1: EC Usable — 스토리지 효율 -->
@@ -872,6 +886,24 @@
     function targetToTiB(value, unit) {
         return unit === 'PiB' ? value * 1024 : value;
     }
+    function readTargetUsableFromDom() {
+        const value = parseFloat(document.getElementById('targetUsable')?.value) || CONFIG.defaults.targetUsable;
+        const unit = document.getElementById('targetUnit')?.value || CONFIG.defaults.targetUnit;
+        return targetToTiB(value, unit);
+    }
+    function preferredCapacityForTarget(targetUsableTB) {
+        if (targetUsableTB <= 150) return 3.84;
+        if (targetUsableTB <= 500) return 7.68;
+        if (targetUsableTB <= 1024) return 15.36;
+        if (targetUsableTB <= 3072) return 30.72;
+        if (targetUsableTB <= 8192) return 61.44;
+        return 122.88;
+    }
+    function chooseRecommendedCapacity(drive, targetUsableTB) {
+        const preferred = preferredCapacityForTarget(targetUsableTB);
+        const capacities = [...drive.capacities].sort((a, b) => a - b);
+        return capacities.find(c => c >= preferred) || capacities[capacities.length - 1];
+    }
     function validateInput(input) {
         input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
         input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
@@ -913,6 +945,23 @@
         if (optimize === 'minNodes') return input.nodeCount * 1000 + surplusPct * 5 + result.totalDrives;
         if (optimize === 'minDrives') return result.totalDrives * 1000 + surplusPct * 5 + input.nodeCount;
         return surplusPct * 10 + Math.abs(input.drivesPerNode - 12) * 8 + input.nodeCount * 2 + result.totalDrives * 0.1;
+    }
+
+    function recommendEcOptions(input) {
+        const defaultParity = Math.min(4, input.stripeSize / 2);
+        return buildParityOptions(input.stripeSize).map(parity => {
+            const candidateInput = { ...input, parityShards: parity };
+            const candidate = generateSizingCandidates(candidateInput)[0];
+            if (!candidate) return null;
+            const isMaxParity = parity === input.stripeSize / 2;
+            const prodLowParityPenalty = input.environment === 'production' && parity < 2 ? 1000 : 0;
+            const score = prodLowParityPenalty
+                + Math.abs(parity - defaultParity) * 80
+                + candidate.surplusPct * 3
+                + candidate.result.totalDrives * 0.15
+                + (isMaxParity ? 30 : 0);
+            return { parity, candidate, score, isMaxParity };
+        }).filter(Boolean).sort((a, b) => a.score - b.score);
     }
 
     // ── 렌더링 ──────────────────────────────────────
@@ -1299,6 +1348,45 @@
         }).join('');
     }
 
+    function renderEcRecommendations(input, recommendations) {
+        const card = document.getElementById('target-ec-card');
+        if (input.calculationMode !== 'target') {
+            card.classList.add('hidden');
+            return;
+        }
+
+        card.classList.remove('hidden');
+        setText('target-ec-subtitle', `현재 목표/드라이브 조건에서 EC Parity별 추천 구성을 비교합니다.`);
+        setText('target-ec-badge', recommendations.length ? `추천 EC:${recommendations[0].parity}` : '후보 없음');
+
+        const list = document.getElementById('target-ec-list');
+        if (!recommendations.length) {
+            list.innerHTML = '<div class="xl:col-span-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">현재 조건에서 EC 추천 후보를 만들 수 없습니다.</div>';
+            return;
+        }
+
+        list.innerHTML = recommendations.slice(0, 6).map((r, idx) => {
+            const c = r.candidate;
+            const isBest = idx === 0;
+            const accent = isBest ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white';
+            const ft = r.isMaxParity ? r.parity - 1 : r.parity;
+            const note = r.isMaxParity ? 'Max Parity · Write Quorum K+1' : `장애 허용 ${ft}드라이브`;
+            return `<div class="rounded-xl border ${accent} p-3">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <span class="text-sm font-bold text-gray-800">${isBest ? '추천 ' : ''}EC:${r.parity}</span>
+                    <span class="text-xs font-semibold ${isBest ? 'text-amber-700' : 'text-gray-500'}">${c.result.storageEfficiencyPct.toFixed(1)}%</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-700 mb-1">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브</div>
+                <div class="space-y-1 text-xs text-gray-500">
+                    <div class="flex justify-between gap-2"><span>Usable</span><strong class="text-red-700">${formatCapacity(c.result.usableTB)}</strong></div>
+                    <div class="flex justify-between gap-2"><span>총 드라이브</span><strong class="text-gray-700">${c.result.totalDrives}개</strong></div>
+                    <div class="flex justify-between gap-2"><span>목표 대비</span><strong class="text-gray-700">+${c.surplusPct.toFixed(1)}%</strong></div>
+                    <div class="text-gray-400 pt-1">${note}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
     function renderEnvBanner(environment) {
         const banner = document.getElementById('env-banner');
         if (environment === 'dev') {
@@ -1347,15 +1435,18 @@
         syncCalculationModeUi(input.calculationMode);
         if (input.calculationMode === 'target') {
             const candidates = generateSizingCandidates(input);
+            const ecRecommendations = recommendEcOptions(input);
             const activeInput = candidates[0]?.input || input;
             const result = calculate(activeInput); result.warnings = checkWarnings(activeInput, result);
             renderResult(activeInput, result);
             renderTargetCandidates(input, candidates);
+            renderEcRecommendations(input, ecRecommendations);
             return;
         }
         const result = calculate(input); result.warnings = checkWarnings(input, result);
         renderResult(input, result);
         renderTargetCandidates(input, []);
+        renderEcRecommendations(input, []);
     }
 
     function rebuildParityOptions(stripeSize, selectedParity) {
@@ -1412,13 +1503,14 @@
         const drive = getSelectedCatalogDrive() || CONFIG.driveCatalog.find(d => d.model === model);
         const capacitySelect = document.getElementById('driveCatalogCapacity');
         if (!drive) return;
+        const recommendedCapacity = chooseRecommendedCapacity(drive, readTargetUsableFromDom());
         const capacityValue = drive.capacities.includes(selectedCapacity)
             ? selectedCapacity
-            : drive.capacities.includes(CONFIG.defaults.driveSizeTB) ? CONFIG.defaults.driveSizeTB : drive.capacities[0];
+            : recommendedCapacity;
         capacitySelect.innerHTML = drive.capacities
-            .map(c => `<option value="${c}"${c === capacityValue ? ' selected' : ''}>${fmtDriveSize(c)} TB</option>`)
+            .map(c => `<option value="${c}"${c === capacityValue ? ' selected' : ''}>${fmtDriveSize(c)} TB${c === recommendedCapacity ? ' (권장)' : ''}</option>`)
             .join('');
-        renderDriveModelInfo(drive);
+        renderDriveModelInfo(drive, capacityValue, recommendedCapacity);
     }
 
     function syncDriveCatalogUi() {
@@ -1440,15 +1532,26 @@
         setText('nodeCountHint', isTarget ? '대 이상 (1 ~ 64)' : '대  (1 ~ 64)');
     }
 
+    function syncRecommendedCatalogCapacityForTarget() {
+        const mode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
+        if (mode !== 'catalog') return;
+        const drive = getSelectedCatalogDrive();
+        if (!drive) return;
+        const recommendedCapacity = chooseRecommendedCapacity(drive, readTargetUsableFromDom());
+        populateDriveCapacities(drive.model, recommendedCapacity);
+        applySelectedCatalogDrive();
+    }
+
     function applySelectedCatalogDrive() {
         const drive = getSelectedCatalogDrive();
         if (!drive) return;
         const capacity = parseFloat(document.getElementById('driveCatalogCapacity').value) || drive.capacities[0];
+        const recommendedCapacity = chooseRecommendedCapacity(drive, readTargetUsableFromDom());
         document.getElementById('driveType').value = drive.driveType;
         document.getElementById('driveSizeTB').step = '0.01';
         document.getElementById('driveUnit').value = 'TB';
         setDriveSizeValue(capacity);
-        renderDriveModelInfo(drive);
+        renderDriveModelInfo(drive, capacity, recommendedCapacity);
     }
 
     function setDriveSizeValue(tb) {
@@ -1466,14 +1569,19 @@
         });
     }
 
-    function renderDriveModelInfo(drive) {
+    function renderDriveModelInfo(drive, selectedCapacity, recommendedCapacity) {
         const tags = (drive.selectionTags || [])
             .map(tag => `<span class="inline-flex items-center rounded-md border border-red-100 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">${tag}</span>`)
             .join('');
+        const recommendation = recommendedCapacity
+            ? `<span class="font-semibold text-red-600">목표 기준 권장 ${fmtDriveSize(recommendedCapacity)}TB</span>` +
+              (selectedCapacity && selectedCapacity !== recommendedCapacity ? ` <span class="text-gray-400">/ 현재 ${fmtDriveSize(selectedCapacity)}TB</span>` : '')
+            : '';
         document.getElementById('drive-model-info').innerHTML =
             `<div class="flex flex-wrap gap-1 mb-1">${tags}</div>` +
             `<span class="font-semibold text-gray-700">${drive.interface}</span>` +
             ` · ${drive.formFactor} · ${drive.nand} · ${drive.workload}<br>` +
+            `${recommendation ? recommendation + '<br>' : ''}` +
             `<span class="text-gray-400">${drive.note}</span>`;
     }
 
@@ -1503,7 +1611,7 @@
         populateDriveVendors(d.driveVendor);
         document.getElementById('driveVendor').value = d.driveVendor;
         populateDriveModels(d.driveVendor, d.driveModel);
-        populateDriveCapacities(d.driveModel, d.driveSizeTB);
+        populateDriveCapacities(d.driveModel);
         document.getElementById('driveType').value      = d.driveType;
         document.getElementById('driveUnit').value      = 'TB';
         document.getElementById('driveSizeTB').step     = d.driveType === 'HDD' ? '1' : '0.01';
@@ -1517,8 +1625,8 @@
         const envRadio = document.querySelector(`input[name="environment"][value="${d.environment}"]`);
         if (envRadio) envRadio.checked = true;
         updateDrivePresets(d.driveType);
-        setDriveSizeValue(d.driveSizeTB);
         syncDriveCatalogUi();
+        if (d.driveSelectionMode !== 'catalog') setDriveSizeValue(d.driveSizeTB);
         syncCalculationModeUi(d.calculationMode);
         onInputChange();
     }
@@ -1526,7 +1634,7 @@
     function bindEvents() {
         populateDriveVendors();
         document.querySelectorAll('select').forEach(el => {
-            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity') return;
+            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity' || el.id === 'targetUnit') return;
             el.addEventListener('change', onInputChange);
         });
         document.querySelectorAll('input[type="radio"]').forEach(el => {
@@ -1537,8 +1645,23 @@
             onInputChange();
         }));
         document.querySelectorAll('input[type="number"]').forEach(el => {
+            if (el.id === 'targetUsable') return;
             el.addEventListener('blur', onInputChange);
             el.addEventListener('keydown', e => { if (e.key === 'Enter') onInputChange(); });
+        });
+        document.getElementById('targetUsable').addEventListener('blur', () => {
+            syncRecommendedCatalogCapacityForTarget();
+            onInputChange();
+        });
+        document.getElementById('targetUsable').addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                syncRecommendedCatalogCapacityForTarget();
+                onInputChange();
+            }
+        });
+        document.getElementById('targetUnit').addEventListener('change', () => {
+            syncRecommendedCatalogCapacityForTarget();
+            onInputChange();
         });
         document.getElementById('stripeSize').addEventListener('change', function () {
             const newStripe = parseInt(this.value);
