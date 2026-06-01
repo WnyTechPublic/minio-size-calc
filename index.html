@@ -127,13 +127,14 @@
             #warning-list li:nth-child(n+7) { display: none !important; }
             #target-candidates-list .space-y-1 > div { padding: 1px 0 !important; }
             #sum-status { margin-top: 8px !important; padding: 6px !important; font-size: 10px !important; }
-            #es-grid, #es-ratio, #es-legend { display: none !important; }
-            #es-desc { font-size: 9px !important; margin-top: 4px !important; }
-            #chart-section { display: block !important; }
-            #chart-section > div { width: 100% !important; margin-bottom: 8px !important; }
-            #chart-storage { display: block !important; height: 190px !important; max-height: 190px !important; }
-            #chart-parity-wrap { display: block !important; height: 230px !important; max-height: 230px !important; min-height: 0 !important; }
-            #chart-parity { height: 230px !important; max-height: 230px !important; }
+            #chart-section { display: none !important; }
+            #es-grid { --drive-block-px: 11px; --drive-gap-px: 2px; overflow: hidden !important; padding-bottom: 0 !important; }
+            #es-ratio { --ratio-bar-height: 14px; margin-top: 6px !important; padding-top: 6px !important; }
+            #es-ratio > div:first-child { margin-bottom: 4px !important; }
+            #es-ratio > div:not(:first-child) { gap: 6px !important; margin-bottom: 3px !important; }
+            #es-ratio span, #es-ratio div, #es-legend span, #es-desc { font-size: 8px !important; }
+            #es-legend { gap: 6px !important; margin-top: 6px !important; padding-top: 6px !important; }
+            #es-desc { margin-top: 4px !important; line-height: 1.35 !important; }
         }
     </style>
 </head>
@@ -1230,11 +1231,13 @@
         // 드라이브 수에 따라 블록 크기 조정
         const blockPx = drivesPerNode <= 8 ? 24 : drivesPerNode <= 16 ? 18 : drivesPerNode <= 32 ? 13 : 10;
         const gap      = 3;
+        const blockSize = `var(--drive-block-px, ${blockPx}px)`;
+        const gridGap = `var(--drive-gap-px, ${gap}px)`;
 
         // ── 그리드 HTML 빌드 ──────────────────────────
         let grid = `<div style="display:inline-grid;
-                        grid-template-columns:auto repeat(${drivesPerNode},${blockPx}px);
-                        gap:${gap}px;align-items:center;min-width:0;">`;
+                        grid-template-columns:auto repeat(${drivesPerNode},${blockSize});
+                        gap:${gridGap};align-items:center;min-width:0;">`;
 
         // 열 헤더 (드라이브 번호)
         grid += `<div style="font-size:9px;color:#d1d5db;text-align:right;padding-right:4px;">노드</div>`;
@@ -1254,7 +1257,7 @@
                 const style    = isUsed
                     ? `background:${color};opacity:0.82;border-radius:3px;`
                     : `background:transparent;border:1.5px dashed #d1d5db;border-radius:3px;`;
-                grid += `<div title="${label}" style="width:${blockPx}px;height:${blockPx}px;${style}cursor:default;"></div>`;
+                grid += `<div title="${label}" style="width:${blockSize};height:${blockSize};${style}cursor:default;"></div>`;
             }
         }
         grid += '</div>';
@@ -1278,7 +1281,7 @@
                 ratio += `
                 <div class="flex items-center gap-3">
                     <div style="font-size:11px;color:#6b7280;width:44px;flex-shrink:0;font-weight:500;">Set ${s + 1}</div>
-                    <div style="flex:1;height:22px;border-radius:6px;overflow:hidden;display:flex;min-width:0;background:#f1f5f9;">
+                    <div style="flex:1;height:var(--ratio-bar-height, 22px);border-radius:6px;overflow:hidden;display:flex;min-width:0;background:#f1f5f9;">
                         <div style="width:${dataPct}%;background:${color};display:flex;align-items:center;justify-content:center;transition:width 0.3s;">
                             <span style="font-size:10px;color:white;font-weight:700;white-space:nowrap;padding:0 6px;text-shadow:0 1px 2px rgba(0,0,0,0.15);">
                                 Data ${result.dataShards}
