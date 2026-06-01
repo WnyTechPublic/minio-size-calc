@@ -194,11 +194,11 @@
                             <label class="block text-sm font-medium text-gray-600 mb-2">드라이브 선택 방식</label>
                             <div class="grid grid-cols-2 gap-2 mb-3">
                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
-                                    <input type="radio" name="driveSelectionMode" value="manual" checked class="accent-red-500">
+                                    <input type="radio" name="driveSelectionMode" value="manual" class="accent-red-500">
                                     <span class="text-sm font-medium text-gray-700">직접 입력</span>
                                 </label>
                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
-                                    <input type="radio" name="driveSelectionMode" value="catalog" class="accent-red-500">
+                                    <input type="radio" name="driveSelectionMode" value="catalog" checked class="accent-red-500">
                                     <span class="text-sm font-medium text-gray-700">모델 선택</span>
                                 </label>
                             </div>
@@ -567,7 +567,7 @@
         },
         defaults: {
             nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
-            driveSelectionMode: 'manual', driveVendor: 'Micron', driveModel: '6550 ION',
+            driveSelectionMode: 'catalog', driveVendor: 'Micron', driveModel: '6550 ION',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
         },
@@ -1513,4 +1513,3 @@
     </script>
 </body>
 </html>
-
