@@ -313,21 +313,18 @@
                         <span class="badge">③</span>
                         EC (Erasure Coding) 설정
                         <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
-                            data-tooltip="Stripe Size는 하나의 Erasure Set을 구성하는 드라이브 수(2/4/8/16 고정)이며, Parity는 장애를 허용할 드라이브 수입니다. Data 샤드(K) = Stripe - Parity, Usable 효율 = K / Stripe입니다.">?</span>
+                            data-tooltip="Stripe Size는 하나의 Erasure Set을 구성하는 드라이브 수입니다. 2~16 사이 정수로 입력하며, Parity는 1~floor(Stripe/2) 범위에서 입력합니다. Data 샤드(K) = Stripe - Parity, Usable 효율 = K / Stripe입니다.">?</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3 mb-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">Stripe Size (N)</label>
-                            <select id="stripeSize" class="field-input">
-                                <option value="2">2</option>
-                                <option value="4">4</option>
-                                <option value="8">8</option>
-                                <option value="16" selected>16</option>
-                            </select>
+                            <input id="stripeSize" type="number" min="2" max="16" step="1" value="16"
+                                class="field-input">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">Parity (M)</label>
-                            <select id="parityShards" class="field-input"></select>
+                            <input id="parityShards" type="number" min="1" max="8" step="1" value="4"
+                                class="field-input">
                         </div>
                     </div>
                     <div id="ec-info" class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-gray-700 leading-7"></div>
@@ -532,7 +529,7 @@
                 </div>
 
                 <!-- 차트 2개 나란히 -->
-                <div id="chart-section" class="grid grid-cols-2 gap-4">
+                <div id="chart-section" class="no-print grid grid-cols-2 gap-4">
                     <!-- 차트 1: 스토리지 분해 -->
                     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
                         <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
@@ -654,7 +651,7 @@
     'use strict';
 
     const CONFIG = {
-        validStripeSizes: [2, 4, 8, 16],
+        stripeSize: { min: 2, max: 16 },
         raidEfficiency: { JBOD: 1.0, RAID0: 1.0, RAID1: 0.5, RAID10: 0.5 },
         thresholds: {
             production: { minCoresWarning: 8,  minRamGiBWarning: 256, minNicGbpsWarning: 100, minNicGbpsCritical: 25, minParityHA: 2, minNodes: 4 },
@@ -819,7 +816,7 @@
         const usableRounded        = Math.round(usableTB);
         const storageEfficiencyPct = (dataShards / stripeSize) * 100;
         const usablePerNodeTB      = usableTB / nodeCount;
-        const isMaxParity           = (parityShards === stripeSize / 2);
+        const isMaxParity           = (stripeSize % 2 === 0 && parityShards === stripeSize / 2);
         const writeQuorum           = isMaxParity ? (dataShards + 1) : dataShards;
         const readQuorum            = dataShards;
         const driveFailureTolerance = isMaxParity ? (parityShards - 1) : parityShards;
@@ -900,10 +897,10 @@
     }
 
     function buildParityOptions(stripeSize) {
-        return Array.from({ length: stripeSize / 2 }, (_, i) => i + 1);
+        return Array.from({ length: Math.floor(stripeSize / 2) }, (_, i) => i + 1);
     }
     function clampParity(currentParity, newStripeSize) {
-        return Math.min(currentParity, newStripeSize / 2);
+        return Math.max(1, Math.min(currentParity || 1, Math.floor(newStripeSize / 2)));
     }
     function formatCapacity(tib) {
         if (tib >= 1024) return (tib / 1024).toFixed(1) + ' PiB';
@@ -945,8 +942,10 @@
         input.drivesPerNode = Math.max(1,    Math.min(64,  input.drivesPerNode || 1));
         input.physicalCores = Math.max(4,    Math.min(256, input.physicalCores || 4));
         input.targetUsableTB = Math.max(1, input.targetUsableTB || CONFIG.defaults.targetUsable * 1024);
-        if (!CONFIG.validStripeSizes.includes(input.stripeSize)) input.stripeSize = CONFIG.defaults.stripeSize;
-        input.parityShards = Math.max(1, Math.min(input.stripeSize / 2, input.parityShards || 1));
+        input.stripeSize = Math.round(input.stripeSize || CONFIG.defaults.stripeSize);
+        input.stripeSize = Math.max(CONFIG.stripeSize.min, Math.min(CONFIG.stripeSize.max, input.stripeSize));
+        input.parityShards = Math.round(input.parityShards || 1);
+        input.parityShards = clampParity(input.parityShards, input.stripeSize);
         return input;
     }
 
@@ -983,12 +982,12 @@
     }
 
     function recommendEcOptions(input) {
-        const defaultParity = Math.min(4, input.stripeSize / 2);
+        const defaultParity = Math.min(4, Math.floor(input.stripeSize / 2));
         return buildParityOptions(input.stripeSize).map(parity => {
             const candidateInput = { ...input, parityShards: parity };
             const candidate = generateSizingCandidates(candidateInput)[0];
             if (!candidate) return null;
-            const isMaxParity = parity === input.stripeSize / 2;
+            const isMaxParity = input.stripeSize % 2 === 0 && parity === input.stripeSize / 2;
             const prodLowParityPenalty = input.environment === 'production' && parity < 2 ? 1000 : 0;
             const score = prodLowParityPenalty
                 + Math.abs(parity - defaultParity) * 80
@@ -1179,7 +1178,7 @@
     function renderParityComparisonChart(input, result) {
         const ctx = document.getElementById('chart-parity').getContext('2d');
         if (_chartParity) { _chartParity.destroy(); _chartParity = null; }
-        const parityList = Array.from({ length: input.stripeSize / 2 }, (_, i) => i + 1);
+        const parityList = buildParityOptions(input.stripeSize);
         const effRaw = input.driveSizeTB * input.drivesPerNode * input.nodeCount * CONFIG.raidEfficiency[input.raidType];
         const usables = parityList.map(p => effRaw * ((input.stripeSize - p) / input.stripeSize));
         const isCur = p => p === input.parityShards;
@@ -1192,7 +1191,7 @@
             data: {
                 // 라벨: P4 (최대 4대) — Parity = MaxParity면 M-1, 아니면 M
                 labels: parityList.map(p => {
-                    const isMax = (p === input.stripeSize / 2);
+                    const isMax = (input.stripeSize % 2 === 0 && p === input.stripeSize / 2);
                     const ft    = isMax ? (p - 1) : p;
                     return `P${p}  (최대 ${ft}대)`;
                 }),
@@ -1479,6 +1478,7 @@
 
     function onInputChange() {
         let input = readInputs(); input = validateInput(input);
+        syncEcInputs(input);
         syncCalculationModeUi(input.calculationMode);
         if (input.calculationMode === 'target') {
             const candidates = generateSizingCandidates(input);
@@ -1497,8 +1497,18 @@
     }
 
     function rebuildParityOptions(stripeSize, selectedParity) {
-        document.getElementById('parityShards').innerHTML = buildParityOptions(stripeSize)
-            .map(p => `<option value="${p}"${p === selectedParity ? ' selected' : ''}>${p}</option>`).join('');
+        const parityInput = document.getElementById('parityShards');
+        const parity = clampParity(selectedParity, stripeSize);
+        parityInput.max = Math.floor(stripeSize / 2);
+        parityInput.value = parity;
+    }
+
+    function syncEcInputs(input) {
+        const stripeInput = document.getElementById('stripeSize');
+        const parityInput = document.getElementById('parityShards');
+        stripeInput.value = input.stripeSize;
+        parityInput.max = Math.floor(input.stripeSize / 2);
+        parityInput.value = input.parityShards;
     }
 
     function updateDrivePresets(driveType) {
@@ -1681,7 +1691,7 @@
     function bindEvents() {
         populateDriveVendors();
         document.querySelectorAll('select').forEach(el => {
-            if (el.id === 'stripeSize' || el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity' || el.id === 'targetUnit') return;
+            if (el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity' || el.id === 'targetUnit') return;
             el.addEventListener('change', onInputChange);
         });
         document.querySelectorAll('input[type="radio"]').forEach(el => {
@@ -1710,10 +1720,9 @@
             syncRecommendedCatalogCapacityForTarget();
             onInputChange();
         });
-        document.getElementById('stripeSize').addEventListener('change', function () {
-            const newStripe = parseInt(this.value);
-            rebuildParityOptions(newStripe, clampParity(parseInt(document.getElementById('parityShards').value) || 1, newStripe));
-            onInputChange();
+        document.getElementById('stripeSize').addEventListener('input', function () {
+            const newStripe = Math.max(CONFIG.stripeSize.min, Math.min(CONFIG.stripeSize.max, Math.round(parseInt(this.value) || CONFIG.defaults.stripeSize)));
+            document.getElementById('parityShards').max = Math.floor(newStripe / 2);
         });
         document.getElementById('driveUnit').addEventListener('change', function () {
             const sizeInput = document.getElementById('driveSizeTB');
