@@ -194,12 +194,12 @@
                             <label class="block text-sm font-medium text-gray-600 mb-2">드라이브 선택 방식</label>
                             <div class="grid grid-cols-2 gap-2 mb-3">
                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
-                                    <input type="radio" name="driveSelectionMode" value="manual" class="accent-red-500">
-                                    <span class="text-sm font-medium text-gray-700">직접 입력</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
                                     <input type="radio" name="driveSelectionMode" value="catalog" checked class="accent-red-500">
                                     <span class="text-sm font-medium text-gray-700">모델 선택</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-lg border-2 border-gray-200 hover:border-red-200 transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50">
+                                    <input type="radio" name="driveSelectionMode" value="manual" class="accent-red-500">
+                                    <span class="text-sm font-medium text-gray-700">직접 입력</span>
                                 </label>
                             </div>
                             <div id="drive-catalog-panel" class="hidden rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
@@ -567,7 +567,7 @@
         },
         defaults: {
             nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
-            driveSelectionMode: 'catalog', driveVendor: 'Micron', driveModel: '6550 ION',
+            driveSelectionMode: 'catalog', driveVendor: 'Samsung', driveModel: 'PM1733a / BM1743',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
         },
@@ -575,6 +575,15 @@
             NVMe: { sizes: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44, 122.88], defaultSize: 30.72 },
             SSD:  { sizes: [1.92, 3.84, 7.68, 15.36],               defaultSize: 7.68  },
             HDD:  { sizes: [8, 12, 14, 16, 18, 20],                 defaultSize: 16    },
+        },
+        driveVendorRank: {
+            Samsung: 1,
+            Solidigm: 2,
+            Micron: 3,
+            Kioxia: 4,
+            SanDisk: 5,
+            Seagate: 6,
+            'Dell / HPE OEM': 7,
         },
         driveCatalog: [
             {
@@ -1219,7 +1228,8 @@
     }
 
     function getCatalogVendors() {
-        return [...new Set(CONFIG.driveCatalog.map(d => d.vendor))];
+        return [...new Set(CONFIG.driveCatalog.map(d => d.vendor))]
+            .sort((a, b) => (CONFIG.driveVendorRank[a] || 999) - (CONFIG.driveVendorRank[b] || 999) || a.localeCompare(b));
     }
 
     function getCatalogModels(vendor) {
