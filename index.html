@@ -1008,8 +1008,12 @@
     function generateSizingCandidates(input, options = {}) {
         const varyParity = options.varyParity !== false;
         const parityOptions = varyParity ? buildParityOptions(input.stripeSize) : [input.parityShards];
-        const minNodes = Math.max(input.environment === 'production' ? 4 : 1, input.nodeCount || 1);
-        const maxNodes = input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64;
+        const minNodes = Math.max(1, input.nodeCount || 1);
+        const prodMinNodes = CONFIG.thresholds.production.minNodes;
+        const forceRequestedNodeCount = input.environment === 'production' && input.nodeCount < prodMinNodes;
+        const maxNodes = forceRequestedNodeCount
+            ? minNodes
+            : (input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64);
         if (minNodes > maxNodes) return [];
         const candidates = [];
 
