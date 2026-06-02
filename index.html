@@ -993,27 +993,31 @@
         return input;
     }
 
-    function generateSizingCandidates(input) {
+    function generateSizingCandidates(input, options = {}) {
+        const varyParity = options.varyParity !== false;
+        const parityOptions = varyParity ? buildParityOptions(input.stripeSize) : [input.parityShards];
         const minNodes = Math.max(input.environment === 'production' ? 4 : 1, input.nodeCount || 1);
         const maxNodes = input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64;
         if (minNodes > maxNodes) return [];
         const candidates = [];
 
-        for (let nodeCount = minNodes; nodeCount <= maxNodes; nodeCount++) {
-            CONFIG.targetSizing.driveCountsPerNode.forEach(drivesPerNode => {
-                const totalDrives = nodeCount * drivesPerNode;
-                if (totalDrives < input.stripeSize || totalDrives % input.stripeSize !== 0) return;
+        parityOptions.forEach(parityShards => {
+            for (let nodeCount = minNodes; nodeCount <= maxNodes; nodeCount++) {
+                CONFIG.targetSizing.driveCountsPerNode.forEach(drivesPerNode => {
+                    const totalDrives = nodeCount * drivesPerNode;
+                    if (totalDrives < input.stripeSize || totalDrives % input.stripeSize !== 0) return;
 
-                const candidateInput = { ...input, nodeCount, drivesPerNode };
-                const result = calculate(candidateInput);
-                if (result.usableTB < input.targetUsableTB) return;
-                if (result.driveFailureTolerance < input.minFaultTolerance) return;
+                    const candidateInput = { ...input, nodeCount, drivesPerNode, parityShards };
+                    const result = calculate(candidateInput);
+                    if (result.usableTB < input.targetUsableTB) return;
+                    if (result.driveFailureTolerance < input.minFaultTolerance) return;
 
-                const surplusTB = result.usableTB - input.targetUsableTB;
-                const surplusPct = (surplusTB / input.targetUsableTB) * 100;
-                candidates.push({ input: candidateInput, result, surplusTB, surplusPct });
-            });
-        }
+                    const surplusTB = result.usableTB - input.targetUsableTB;
+                    const surplusPct = (surplusTB / input.targetUsableTB) * 100;
+                    candidates.push({ input: candidateInput, result, surplusTB, surplusPct });
+                });
+            }
+        });
 
         return candidates
             .map(c => ({ ...c, score: scoreSizingCandidate(c, input) }))
@@ -1024,33 +1028,40 @@
     function scoreSizingCandidate(candidate, sourceInput) {
         const { input, result, surplusPct } = candidate;
         const optimize = sourceInput.targetOptimize;
+        const defaultParity = Math.min(4, Math.floor(input.stripeSize / 2));
+        const isMaxParity = input.stripeSize % 2 === 0 && input.parityShards === input.stripeSize / 2;
+        const parityPenalty = Math.abs(input.parityShards - defaultParity) * 700 + (isMaxParity ? 300 : 0);
         let score;
         if (optimize === 'minNodes') score = input.nodeCount * 1000 + surplusPct * 5 + result.totalDrives;
         else if (optimize === 'minDrives') score = result.totalDrives * 1000 + surplusPct * 5 + input.nodeCount;
         else score = surplusPct * 10 + Math.abs(input.drivesPerNode - 12) * 8 + input.nodeCount * 2 + result.totalDrives * 0.1;
+        score += sourceInput.customerPriority === 'stability' ? parityPenalty * 0.25 : parityPenalty;
 
         if (sourceInput.customerPriority === 'cost') {
-            score += result.totalDrives * 8 + surplusPct * 6 + input.nodeCount * 4;
+            score += input.parityShards * 520 + result.totalDrives * 10 + surplusPct * 4 + input.nodeCount * 4 - result.storageEfficiencyPct * 2;
         } else if (sourceInput.customerPriority === 'stability') {
-            score += (result.erasureSetCount < 2 ? 180 : 0) - result.driveFailureTolerance * 120 - input.nodeCount * 3;
+            score += (result.erasureSetCount < 2 ? 180 : 0) - result.driveFailureTolerance * 180 - input.nodeCount * 3 + (isMaxParity ? 700 : 0);
         } else if (sourceInput.customerPriority === 'performance') {
-            score += Math.abs(input.drivesPerNode - 12) * 10 - input.nodeCount * 8 - result.erasureSetCount * 12;
+            const desiredNodes = Math.min(sourceInput.maxNodeLimit > 0 ? sourceInput.maxNodeLimit : 8, 8);
+            score = surplusPct * 0.8
+                + Math.abs(input.drivesPerNode - 12) * 8
+                + result.totalDrives * 0.5
+                + Math.abs(input.nodeCount - desiredNodes) * 120
+                - result.erasureSetCount * 40
+                + parityPenalty;
         }
         return score;
     }
 
     function recommendEcOptions(input) {
-        const defaultParity = Math.min(4, Math.floor(input.stripeSize / 2));
         return buildParityOptions(input.stripeSize).map(parity => {
             const candidateInput = { ...input, parityShards: parity };
-            const candidate = generateSizingCandidates(candidateInput)[0];
+            const candidate = generateSizingCandidates(candidateInput, { varyParity: false })[0];
             if (!candidate) return null;
             const isMaxParity = input.stripeSize % 2 === 0 && parity === input.stripeSize / 2;
             const prodLowParityPenalty = input.environment === 'production' && parity < 2 ? 1000 : 0;
-            const score = prodLowParityPenalty
-                + Math.abs(parity - defaultParity) * 200
-                + candidate.surplusPct * 3
-                + candidate.result.totalDrives * 0.15
+            const score = candidate.score
+                + prodLowParityPenalty
                 + (isMaxParity ? 30 : 0)
                 + scoreEcPreference(input.customerPriority, parity, candidate.result.driveFailureTolerance, candidate.result.storageEfficiencyPct);
             return { parity, candidate, score, isMaxParity };
@@ -1490,18 +1501,19 @@
         list.innerHTML = candidates.map((c, idx) => {
             const label = idx === 0 ? '추천 A안' : `${String.fromCharCode(65 + idx)}안`;
             const accent = idx === 0 ? 'border-red-200 bg-red-50/50' : 'border-gray-200 bg-white';
-            const neededRawTB = input.targetUsableTB / (c.result.dataShards / input.stripeSize);
+            const neededRawTB = input.targetUsableTB / (c.result.dataShards / c.input.stripeSize);
             const neededDriveCount = Math.ceil(neededRawTB / input.driveSizeTB);
             const roundedDriveCount = c.result.totalDrives;
             const appliedBadge = idx === 0
                 ? '<span class="text-[11px] font-bold text-white bg-red-500 rounded-md px-1.5 py-0.5">현재 적용 중</span>'
                 : '';
             const roundNote = idx === 0 && roundedDriveCount > neededDriveCount
-                ? `<div class="mt-2 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">목표 달성에는 약 ${neededDriveCount}개 드라이브가 필요하지만, Stripe ${input.stripeSize} 배수 구성을 위해 ${roundedDriveCount}개로 올림했습니다.</div>`
+                ? `<div class="mt-2 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">목표 달성에는 약 ${neededDriveCount}개 드라이브가 필요하지만, Stripe ${c.input.stripeSize} 배수 구성을 위해 ${roundedDriveCount}개로 올림했습니다.</div>`
                 : '';
             const reasonTags = idx === 0 ? [
                 '목표 용량 충족',
                 getCustomerPriorityLabel(input.customerPriority),
+                `EC:${c.input.parityShards}`,
                 c.result.remainingDrives === 0 ? 'Stripe 배수 구성' : `미사용 ${c.result.remainingDrives}드라이브`,
                 c.result.driveFailureTolerance >= input.minFaultTolerance ? `장애 허용 ${c.result.driveFailureTolerance}드라이브` : '장애 허용 미달',
                 c.surplusPct <= 20 ? '초과율 낮음' : '여유 용량 큼',
@@ -1514,11 +1526,12 @@
                     <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0">${label}${appliedBadge}</span>
                     <span class="text-xs font-semibold text-red-600">+${c.surplusPct.toFixed(1)}%</span>
                 </div>
-                <div class="text-sm font-semibold text-gray-700 mb-1">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브</div>
+                <div class="text-sm font-semibold text-gray-700 mb-1">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브 · EC:${c.input.parityShards}</div>
                 <div class="space-y-1 text-xs text-gray-500">
                     <div class="flex justify-between gap-2"><span>총 드라이브</span><strong class="text-gray-700">${c.result.totalDrives}개</strong></div>
                     <div class="flex justify-between gap-2"><span>Usable</span><strong class="text-red-700">${formatCapacity(c.result.usableTB)}</strong></div>
                     <div class="flex justify-between gap-2"><span>여유 용량</span><strong class="text-gray-700">${formatCapacity(c.surplusTB)}</strong></div>
+                    <div class="flex justify-between gap-2"><span>Data / Parity</span><strong class="text-gray-700">${c.result.dataShards} / ${c.result.parityShards}</strong></div>
                     <div class="flex justify-between gap-2"><span>Erasure Set</span><strong class="text-gray-700">${c.result.erasureSetCount}개</strong></div>
                 </div>
                 ${reasonHtml}
@@ -1621,6 +1634,7 @@
             const candidates = generateSizingCandidates(input);
             const ecRecommendations = recommendEcOptions(input);
             const activeInput = candidates[0]?.input || input;
+            syncEcInputs(activeInput);
             const result = calculate(activeInput); result.warnings = checkWarnings(activeInput, result);
             renderResult(activeInput, result);
             renderTargetCandidates(input, candidates);
