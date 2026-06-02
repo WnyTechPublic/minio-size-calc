@@ -186,11 +186,11 @@
                         <div id="target-sizing-panel" class="rounded-xl border border-red-100 bg-red-50/40 p-3">
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">목표 Usable 용량</label>
                             <div class="grid grid-cols-[1fr_88px] gap-2 mb-3">
-                                <input id="targetUsable" type="number" min="1" step="1" value="1"
+                                <input id="targetUsable" type="number" min="1" step="1" value="100"
                                     class="field-input">
                                 <select id="targetUnit" class="field-input">
-                                    <option value="PiB" selected>PiB</option>
-                                    <option value="TiB">TiB</option>
+                                    <option value="PiB">PiB</option>
+                                    <option value="TiB" selected>TiB</option>
                                 </select>
                             </div>
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">추천 기준</label>
@@ -669,7 +669,7 @@
             driveSelectionMode: 'catalog', driveVendor: 'Samsung', driveModel: 'PM1733a / BM1743',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
-            calculationMode: 'target', targetUsable: 1, targetUnit: 'PiB', targetOptimize: 'balanced',
+            calculationMode: 'target', targetUsable: 100, targetUnit: 'TiB', targetOptimize: 'balanced',
         },
         targetSizing: {
             driveCountsPerNode: [4, 6, 8, 10, 12, 16, 20, 24, 36, 48, 60, 64],
@@ -948,7 +948,7 @@
         input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
         input.drivesPerNode = Math.max(1,    Math.min(64,  input.drivesPerNode || 1));
         input.physicalCores = Math.max(4,    Math.min(256, input.physicalCores || 4));
-        input.targetUsableTB = Math.max(1, input.targetUsableTB || CONFIG.defaults.targetUsable * 1024);
+        input.targetUsableTB = Math.max(1, input.targetUsableTB || targetToTiB(CONFIG.defaults.targetUsable, CONFIG.defaults.targetUnit));
         input.stripeSize = Math.round(input.stripeSize || CONFIG.defaults.stripeSize);
         input.stripeSize = Math.max(CONFIG.stripeSize.min, Math.min(CONFIG.stripeSize.max, input.stripeSize));
         input.parityShards = Math.round(input.parityShards || 1);
