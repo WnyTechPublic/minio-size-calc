@@ -926,8 +926,10 @@
 
         if (t.minNodes !== null) {
             if (input.nodeCount < t.minNodes) {
-                w.push({ level: 'warning', item: '운영 노드 수', message: `MinIO 분산 모드 운영 환경 최소 권고는 ${t.minNodes}노드입니다. 현재 ${input.nodeCount}노드 구성은 장애 복구 및 분산 성능이 제한됩니다.` });
+                w.push({ level: 'warning', item: '운영 권고 미달', message: `MinIO 운영 환경은 ${t.minNodes}노드 이상을 권고합니다. 현재 ${input.nodeCount}노드 구성은 계산은 가능하지만, 노드 장애 시 가용성/복구 안정성이 제한됩니다. PoC/개발 목적이면 개발 환경으로 전환해 검토하세요.` });
             } else { w.push({ level: 'ok', item: '운영 노드 수', message: `${input.nodeCount}대 ≥ ${t.minNodes}` }); }
+        } else if (input.nodeCount < 4) {
+            w.push({ level: 'ok', item: '개발 노드 수', message: `${input.nodeCount}노드 구성은 PoC/개발 기준으로 계산합니다. 운영 전환 시 4노드 이상으로 재검토하세요.` });
         }
 
         if (input.calculationMode === 'target' && input.targetUsableTB > 0) {
@@ -1010,7 +1012,7 @@
         const parityOptions = varyParity ? buildParityOptions(input.stripeSize) : [input.parityShards];
         const minNodes = Math.max(1, input.nodeCount || 1);
         const prodMinNodes = CONFIG.thresholds.production.minNodes;
-        const forceRequestedNodeCount = input.environment === 'production' && input.nodeCount < prodMinNodes;
+        const forceRequestedNodeCount = input.nodeCount < prodMinNodes;
         const maxNodes = forceRequestedNodeCount
             ? minNodes
             : (input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64);
