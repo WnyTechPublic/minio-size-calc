@@ -1598,6 +1598,8 @@
         const targetUnit = document.getElementById('targetUnit').value;
         const driveSelectionMode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
         const selectedDrive = getSelectedCatalogDrive();
+        const catalogCapacity = parseFloat(document.getElementById('driveCatalogCapacity')?.value);
+        const manualDriveSizeTB = unit === 'GB' ? rawVal / 1000 : rawVal;
         return {
             calculationMode: document.querySelector('input[name="calculationMode"]:checked').value,
             targetUsable:   targetVal,
@@ -1614,7 +1616,7 @@
             driveModel:    selectedDrive ? selectedDrive.model : null,
             driveLabel:    driveSelectionMode === 'catalog' && selectedDrive ? `${selectedDrive.vendor} ${selectedDrive.model}` : '직접 입력',
             driveType:     driveSelectionMode === 'catalog' && selectedDrive ? selectedDrive.driveType : document.getElementById('driveType').value,
-            driveSizeTB:   unit === 'GB' ? rawVal / 1000 : rawVal,
+            driveSizeTB:   driveSelectionMode === 'catalog' && catalogCapacity ? catalogCapacity : manualDriveSizeTB,
             drivesPerNode: parseInt(document.getElementById('drivesPerNode').value) || 1,
             raidType:      document.getElementById('raidType').value,
             stripeSize:    parseInt(document.getElementById('stripeSize').value),
@@ -1846,7 +1848,8 @@
         if (envRadio) envRadio.checked = true;
         updateDrivePresets(d.driveType);
         syncDriveCatalogUi();
-        if (d.driveSelectionMode !== 'catalog') setDriveSizeValue(d.driveSizeTB);
+        if (d.driveSelectionMode === 'catalog') applySelectedCatalogDrive();
+        else setDriveSizeValue(d.driveSizeTB);
         syncCalculationModeUi(d.calculationMode);
         onInputChange();
     }
