@@ -193,12 +193,6 @@
                                     <option value="TiB" selected>TiB</option>
                                 </select>
                             </div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1.5">추천 기준</label>
-                            <select id="targetOptimize" class="field-input">
-                                <option value="balanced" selected>균형 구성</option>
-                                <option value="minNodes">노드 수 최소</option>
-                                <option value="minDrives">드라이브 수 최소</option>
-                            </select>
                             <div class="mt-3 pt-3 border-t border-red-100">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <span class="text-xs font-bold text-red-700 uppercase">고객 요구 조건</span>
@@ -703,7 +697,7 @@
             driveSelectionMode: 'catalog', driveVendor: 'Samsung', driveModel: 'PM1733a / BM1743',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
             ramGiB: 256, physicalCores: 64, nicGbps: 100,
-            calculationMode: 'target', targetUsable: 100, targetUnit: 'TiB', targetOptimize: 'balanced',
+            calculationMode: 'target', targetUsable: 100, targetUnit: 'TiB',
             customerPriority: 'balanced', minFaultTolerance: 2, maxNodeLimit: 0,
         },
         targetSizing: {
@@ -1027,14 +1021,10 @@
 
     function scoreSizingCandidate(candidate, sourceInput) {
         const { input, result, surplusPct } = candidate;
-        const optimize = sourceInput.targetOptimize;
         const defaultParity = Math.min(4, Math.floor(input.stripeSize / 2));
         const isMaxParity = input.stripeSize % 2 === 0 && input.parityShards === input.stripeSize / 2;
         const parityPenalty = Math.abs(input.parityShards - defaultParity) * 700 + (isMaxParity ? 300 : 0);
-        let score;
-        if (optimize === 'minNodes') score = input.nodeCount * 1000 + surplusPct * 5 + result.totalDrives;
-        else if (optimize === 'minDrives') score = result.totalDrives * 1000 + surplusPct * 5 + input.nodeCount;
-        else score = surplusPct * 10 + Math.abs(input.drivesPerNode - 12) * 8 + input.nodeCount * 2 + result.totalDrives * 0.1;
+        let score = surplusPct * 10 + Math.abs(input.drivesPerNode - 12) * 8 + input.nodeCount * 2 + result.totalDrives * 0.1;
         score += sourceInput.customerPriority === 'stability' ? parityPenalty * 0.25 : parityPenalty;
 
         if (sourceInput.customerPriority === 'cost') {
@@ -1060,19 +1050,9 @@
             if (!candidate) return null;
             const isMaxParity = input.stripeSize % 2 === 0 && parity === input.stripeSize / 2;
             const prodLowParityPenalty = input.environment === 'production' && parity < 2 ? 1000 : 0;
-            const score = candidate.score
-                + prodLowParityPenalty
-                + (isMaxParity ? 30 : 0)
-                + scoreEcPreference(input.customerPriority, parity, candidate.result.driveFailureTolerance, candidate.result.storageEfficiencyPct);
+            const score = candidate.score + prodLowParityPenalty;
             return { parity, candidate, score, isMaxParity };
         }).filter(Boolean).sort((a, b) => a.score - b.score);
-    }
-
-    function scoreEcPreference(priority, parity, faultTolerance, efficiencyPct) {
-        if (priority === 'cost') return parity * 65 - efficiencyPct;
-        if (priority === 'stability') return -faultTolerance * 140 + (parity < 2 ? 500 : 0);
-        if (priority === 'performance') return -efficiencyPct * 1.5 + parity * 20;
-        return 0;
     }
 
     function getCustomerPriorityLabel(value) {
@@ -1605,7 +1585,6 @@
             targetUsable:   targetVal,
             targetUnit,
             targetUsableTB: targetToTiB(targetVal, targetUnit),
-            targetOptimize: document.getElementById('targetOptimize').value,
             customerPriority: document.getElementById('customerPriority').value,
             minFaultTolerance: parseInt(document.getElementById('minFaultTolerance').value) || 0,
             maxNodeLimit: parseInt(document.getElementById('maxNodeLimit').value) || 0,
@@ -1824,7 +1803,6 @@
         document.querySelector(`input[name="calculationMode"][value="${d.calculationMode}"]`).checked = true;
         document.getElementById('targetUsable').value    = d.targetUsable;
         document.getElementById('targetUnit').value      = d.targetUnit;
-        document.getElementById('targetOptimize').value  = d.targetOptimize;
         document.getElementById('customerPriority').value = d.customerPriority;
         document.getElementById('minFaultTolerance').value = d.minFaultTolerance;
         document.getElementById('maxNodeLimit').value = d.maxNodeLimit;
