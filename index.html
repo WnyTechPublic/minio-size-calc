@@ -929,6 +929,17 @@
                 w.push({ level: 'warning', item: '운영 노드 수', message: `MinIO 분산 모드 운영 환경 최소 권고는 ${t.minNodes}노드입니다. 현재 ${input.nodeCount}노드 구성은 장애 복구 및 분산 성능이 제한됩니다.` });
             } else { w.push({ level: 'ok', item: '운영 노드 수', message: `${input.nodeCount}대 ≥ ${t.minNodes}` }); }
         }
+
+        if (input.calculationMode === 'target' && input.targetUsableTB > 0) {
+            const surplusPct = ((result.usableTB - input.targetUsableTB) / input.targetUsableTB) * 100;
+            if (surplusPct >= 200) {
+                w.push({ level: 'critical', item: '목표 대비 용량', message: `Usable ${formatCapacity(result.usableTB)}로 목표 대비 +${surplusPct.toFixed(1)}%입니다. 비용/슬롯 절감 목적이 아니라면 더 작은 드라이브 용량을 검토하세요.` });
+            } else if (surplusPct >= 100) {
+                w.push({ level: 'warning', item: '목표 대비 용량', message: `Usable ${formatCapacity(result.usableTB)}로 목표 대비 +${surplusPct.toFixed(1)}%입니다. 향후 증설 여유 목적이 아니라면 권장 용량을 우선 검토하세요.` });
+            } else {
+                w.push({ level: 'ok', item: '목표 대비 용량', message: `목표 대비 +${surplusPct.toFixed(1)}% 여유 용량` });
+            }
+        }
         return w;
     }
 
@@ -971,6 +982,13 @@
         const preferred = preferredCapacityForTarget(targetUsableTB);
         const capacities = [...drive.capacities].sort((a, b) => a - b);
         return capacities.find(c => c >= preferred) || capacities[capacities.length - 1];
+    }
+    function getCapacityOptionLabel(capacity, recommendedCapacity) {
+        if (capacity === recommendedCapacity) return '권장';
+        if (capacity < recommendedCapacity) return '소형';
+        if (capacity <= recommendedCapacity * 2) return '여유';
+        if (capacity <= recommendedCapacity * 4) return '슬롯 절감';
+        return '과잉 주의';
     }
     function validateInput(input) {
         input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
@@ -1703,7 +1721,7 @@
             ? selectedCapacity
             : recommendedCapacity;
         capacitySelect.innerHTML = drive.capacities
-            .map(c => `<option value="${c}"${c === capacityValue ? ' selected' : ''}>${fmtDriveSize(c)} TB${c === recommendedCapacity ? ' (권장)' : ''}</option>`)
+            .map(c => `<option value="${c}"${c === capacityValue ? ' selected' : ''}>${fmtDriveSize(c)} TB (${getCapacityOptionLabel(c, recommendedCapacity)})</option>`)
             .join('');
         renderDriveModelInfo(drive, capacityValue, recommendedCapacity);
     }
@@ -1771,9 +1789,11 @@
         const tags = (drive.selectionTags || [])
             .map(tag => `<span class="inline-flex items-center rounded-md border border-red-100 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">${tag}</span>`)
             .join('');
+        const capacityLabel = selectedCapacity ? getCapacityOptionLabel(selectedCapacity, recommendedCapacity) : '';
+        const capacityTone = capacityLabel === '과잉 주의' ? 'text-red-600' : (capacityLabel === '여유' || capacityLabel === '슬롯 절감') ? 'text-amber-600' : 'text-gray-500';
         const recommendation = recommendedCapacity
             ? `<span class="font-semibold text-red-600">목표 기준 권장 ${fmtDriveSize(recommendedCapacity)}TB</span>` +
-              (selectedCapacity && selectedCapacity !== recommendedCapacity ? ` <span class="text-gray-400">/ 현재 ${fmtDriveSize(selectedCapacity)}TB</span>` : '')
+              (selectedCapacity && selectedCapacity !== recommendedCapacity ? ` <span class="${capacityTone}">/ 현재 ${fmtDriveSize(selectedCapacity)}TB · ${capacityLabel}</span>` : '')
             : '';
         document.getElementById('drive-model-info').innerHTML =
             `<div class="flex flex-wrap gap-1 mb-1">${tags}</div>` +
