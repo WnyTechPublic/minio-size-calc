@@ -181,6 +181,7 @@
                                     <span class="text-sm font-medium text-gray-700">구성 기준</span>
                                 </label>
                             </div>
+                            <p id="calculation-mode-help" class="text-xs text-gray-400 mt-2 leading-relaxed"></p>
                         </div>
                         <div id="target-sizing-panel" class="rounded-xl border border-red-100 bg-red-50/40 p-3">
                             <label class="block text-sm font-medium text-gray-600 mb-1.5">목표 Usable 용량</label>
@@ -280,6 +281,7 @@
                                     </div>
                                 </div>
                                 <div id="drive-model-info" class="text-xs text-gray-500 leading-relaxed"></div>
+                                <p class="text-[11px] text-gray-400 mt-2 leading-relaxed">카탈로그는 대표 엔터프라이즈 NVMe 후보입니다. 실제 구매 전 서버 벤더 인증 SKU, 펌웨어 지원, 수급을 확인하세요.</p>
                             </div>
                             <div id="drive-manual-size-panel">
                                 <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
@@ -294,7 +296,7 @@
                                 <div id="drive-preset-container" class="flex flex-wrap items-center gap-1">
                                     <span class="text-xs text-gray-400 font-medium">권고:</span>
                                 </div>
-                                <p class="text-xs text-gray-400 mt-1.5">※ 입력값을 TiB 단위로 그대로 처리 (공식 계산기 동일)</p>
+                                <p class="text-xs text-gray-400 mt-1.5">※ 제조사 표기 TB 값을 단순 사이징 기준값으로 사용합니다. 실제 OS 인식 용량과 차이가 있을 수 있습니다.</p>
                             </div>
                         </div>
                         <div id="drive-count-panel">
@@ -328,6 +330,7 @@
                                 class="field-input">
                         </div>
                     </div>
+                    <div id="ec-range-help" class="text-xs text-gray-400 -mt-2 mb-3"></div>
                     <div id="ec-info" class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-gray-700 leading-7"></div>
                 </div>
 
@@ -391,6 +394,8 @@
 
                 <!-- 환경 배지 -->
                 <div id="env-banner" class="hidden rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2"></div>
+
+                <div id="active-config-banner" class="hidden rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800"></div>
 
                 <!-- 목표 용량 추천 후보 -->
                 <div id="target-candidates-card" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
@@ -1358,6 +1363,7 @@
 
     function renderResult(input, result) {
         renderEnvBanner(input.environment);
+        renderActiveConfigBanner(input, result);
         renderStorage(result);
         renderNetwork(result);
         renderMemory(result);
@@ -1367,6 +1373,21 @@
         renderCharts(input, result);
         renderSummary(input, result);
         renderEcInfo(result);
+    }
+
+    function renderActiveConfigBanner(input, result) {
+        const banner = document.getElementById('active-config-banner');
+        if (!banner) return;
+        if (input.calculationMode !== 'target') {
+            banner.className = 'hidden';
+            banner.innerHTML = '';
+            return;
+        }
+        banner.className = 'rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800';
+        banner.innerHTML =
+            `<span class="font-bold">현재 결과 기준:</span> ` +
+            `추천 A안 · ${input.nodeCount}노드 × ${input.drivesPerNode}드라이브 · ` +
+            `EC:${input.parityShards} / Stripe ${input.stripeSize} · ${formatCapacity(result.usableTB)}`;
     }
 
     function renderTargetCandidates(input, candidates) {
@@ -1398,6 +1419,14 @@
             const roundNote = idx === 0 && roundedDriveCount > neededDriveCount
                 ? `<div class="mt-2 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">목표 달성에는 약 ${neededDriveCount}개 드라이브가 필요하지만, Stripe ${input.stripeSize} 배수 구성을 위해 ${roundedDriveCount}개로 올림했습니다.</div>`
                 : '';
+            const reasonTags = idx === 0 ? [
+                '목표 용량 충족',
+                c.result.remainingDrives === 0 ? 'Stripe 배수 구성' : `미사용 ${c.result.remainingDrives}드라이브`,
+                c.surplusPct <= 20 ? '초과율 낮음' : '여유 용량 큼',
+            ] : [];
+            const reasonHtml = reasonTags.length
+                ? `<div class="flex flex-wrap gap-1 mt-2">${reasonTags.map(tag => `<span class="rounded-md border border-red-100 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-red-700">${tag}</span>`).join('')}</div>`
+                : '';
             return `<div class="rounded-xl border ${accent} p-3">
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0">${label}${appliedBadge}</span>
@@ -1410,6 +1439,7 @@
                     <div class="flex justify-between gap-2"><span>여유 용량</span><strong class="text-gray-700">${formatCapacity(c.surplusTB)}</strong></div>
                     <div class="flex justify-between gap-2"><span>Erasure Set</span><strong class="text-gray-700">${c.result.erasureSetCount}개</strong></div>
                 </div>
+                ${reasonHtml}
                 ${roundNote}
             </div>`;
         }).join('');
@@ -1530,6 +1560,7 @@
         stripeInput.value = input.stripeSize;
         parityInput.max = Math.floor(input.stripeSize / 2);
         parityInput.value = input.parityShards;
+        setText('ec-range-help', `Stripe Size 입력 범위: ${CONFIG.stripeSize.min}~${CONFIG.stripeSize.max} · 현재 Parity 입력 가능 범위: 1~${Math.floor(input.stripeSize / 2)}`);
     }
 
     function updateDrivePresets(driveType) {
@@ -1608,6 +1639,9 @@
         document.getElementById('drive-count-panel').classList.toggle('hidden', isTarget);
         setText('nodeCountLabel', isTarget ? '최소 노드 수' : '노드(서버) 수');
         setText('nodeCountHint', isTarget ? '대 이상 (1 ~ 64)' : '대  (1 ~ 64)');
+        setText('calculation-mode-help', isTarget
+            ? '원하는 Usable 용량을 입력하면 필요한 노드/드라이브 구성을 추천합니다.'
+            : '이미 정해진 노드/드라이브 구성의 Usable 용량을 계산합니다.');
     }
 
     function syncRecommendedCatalogCapacityForTarget() {
