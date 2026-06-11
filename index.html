@@ -649,7 +649,7 @@
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                 <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
                             </svg>
-                            PDF로 저장
+                            인쇄 / PDF 저장
                         </button>
                     </div>
                 </div>
@@ -842,11 +842,20 @@
         ],
     };
 
+    let currentRenderedInput = null;
+    let currentRenderedResult = null;
+
     function calculate(input) {
         const { nodeCount, driveSizeTB, drivesPerNode, raidType, stripeSize, parityShards, ramGiB, nicGbps } = input;
-        const totalRawTB           = driveSizeTB * drivesPerNode * nodeCount;
+        const totalDrives          = drivesPerNode * nodeCount;
+        const erasureSetCount      = Math.floor(totalDrives / stripeSize);
+        const remainingDrives      = totalDrives % stripeSize;
+        const activeDrives         = erasureSetCount * stripeSize;
+        const inactiveRawTB        = driveSizeTB * remainingDrives;
+        const totalRawTB           = driveSizeTB * totalDrives;
+        const activeRawTB          = driveSizeTB * activeDrives;
         const raidFactor           = CONFIG.raidEfficiency[raidType];
-        const effectiveRawTB       = totalRawTB * raidFactor;
+        const effectiveRawTB       = activeRawTB * raidFactor;
         const dataShards           = stripeSize - parityShards;
         const usableTB             = effectiveRawTB * (dataShards / stripeSize);
         const usableRounded        = Math.round(usableTB);
@@ -856,18 +865,15 @@
         const writeQuorum           = isMaxParity ? (dataShards + 1) : dataShards;
         const readQuorum            = dataShards;
         const driveFailureTolerance = isMaxParity ? (parityShards - 1) : parityShards;
-        const totalDrives     = drivesPerNode * nodeCount;
-        const erasureSetCount = Math.floor(totalDrives / stripeSize);
-        const remainingDrives = totalDrives % stripeSize;
         const nodeNicThroughputGBps    = nicGbps / 8;
         const clusterThroughputGBps    = nodeNicThroughputGBps * nodeCount;
         const maxConcurrentReqPerNode  = ramGiB * 1024 * 0.75 / 2;
         const maxConcurrentReqCluster  = maxConcurrentReqPerNode * nodeCount;
         const ratioVsRecommended       = (maxConcurrentReqPerNode / (CONFIG.defaults.ramGiB * 1024 * 0.75 / 2)) * 100;
         return {
-            totalRawTB, effectiveRawTB, usableTB, usableRounded, storageEfficiencyPct, usablePerNodeTB,
+            totalRawTB, activeRawTB, effectiveRawTB, inactiveRawTB, usableTB, usableRounded, storageEfficiencyPct, usablePerNodeTB,
             dataShards, parityShards, isMaxParity, writeQuorum, readQuorum, driveFailureTolerance,
-            totalDrives, erasureSetCount, remainingDrives,
+            totalDrives, activeDrives, erasureSetCount, remainingDrives,
             nodeNicThroughputGBps, clusterThroughputGBps,
             maxConcurrentReqPerNode, maxConcurrentReqCluster, ratioVsRecommended, warnings: [],
         };
@@ -898,8 +904,8 @@
 
         if (input.raidType !== 'JBOD') {
             w.push({ level: isProd ? 'warning' : 'ok', item: 'RAID 구성', message: isProd
-                ? 'RAID 구성은 MinIO 공식 비권고. JBOD + XFS 직접 연결 권고'
-                : `${input.raidType} — 개발 환경에서 허용. 운영 전환 시 JBOD + XFS 구성으로 변경 필요` });
+                ? 'RAID 구성은 MinIO 공식 비권고. MinIO는 RAID 볼륨을 단일 디스크처럼 인식할 수 있으므로 EC Set/장애 허용 계산은 실제 토폴로지와 다를 수 있습니다. JBOD + XFS 직접 연결 권고'
+                : `${input.raidType} — 개발 환경에서만 참고하세요. MinIO 관점의 드라이브 수는 OS에 노출된 볼륨 수 기준이므로 운영 전 JBOD + XFS 구성으로 재검토 필요` });
         } else { w.push({ level: 'ok', item: 'RAID 구성', message: 'JBOD' }); }
 
         if (t.minNicGbpsWarning === null) {
@@ -917,7 +923,7 @@
         if (result.erasureSetCount === 0) {
             w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 드라이브 수(${result.totalDrives})가 Stripe Size(${input.stripeSize})보다 작아 Erasure Set을 구성할 수 없습니다. Stripe Size를 낮추거나 드라이브/노드 수를 늘려주세요.` });
         } else if (result.remainingDrives > 0) {
-            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 ${result.totalDrives}드라이브 중 ${result.erasureSetCount}개 Set(${result.erasureSetCount * input.stripeSize}드라이브) 구성. 잔여 ${result.remainingDrives}드라이브는 Set 미구성으로 MinIO에서 사용되지 않습니다. Stripe Size의 배수(${input.stripeSize}의 배수)로 맞춰주세요.` });
+            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 ${result.totalDrives}드라이브 중 ${result.erasureSetCount}개 Set(${result.activeDrives}드라이브)만 Usable 계산에 반영했습니다. 잔여 ${result.remainingDrives}드라이브(${result.inactiveRawTB.toFixed(1)} TiB RAW)는 MinIO에서 사용되지 않습니다. Stripe Size의 배수(${input.stripeSize}의 배수)로 맞춰주세요.` });
         } else if (result.erasureSetCount > 1) {
             w.push({ level: 'ok', item: 'Erasure Set 구성', message: `다중 Set ${result.erasureSetCount}개 (${result.totalDrives}드라이브 ÷ Stripe ${input.stripeSize}). 모든 드라이브 사용.` });
         } else {
@@ -1010,12 +1016,12 @@
     function generateSizingCandidates(input, options = {}) {
         const varyParity = options.varyParity !== false;
         const parityOptions = varyParity ? buildParityOptions(input.stripeSize) : [input.parityShards];
-        const minNodes = Math.max(1, input.nodeCount || 1);
+        const requestedMinNodes = Math.max(1, input.nodeCount || 1);
         const prodMinNodes = CONFIG.thresholds.production.minNodes;
-        const forceRequestedNodeCount = input.nodeCount < prodMinNodes;
-        const maxNodes = forceRequestedNodeCount
-            ? minNodes
-            : (input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64);
+        const minNodes = input.environment === 'production'
+            ? Math.max(requestedMinNodes, prodMinNodes)
+            : requestedMinNodes;
+        const maxNodes = input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64;
         if (minNodes > maxNodes) return [];
         const candidates = [];
 
@@ -1250,15 +1256,17 @@
     function renderStorageBreakdownChart(result) {
         const ctx = document.getElementById('chart-storage').getContext('2d');
         if (_chartStorage) { _chartStorage.destroy(); _chartStorage = null; }
-        const raidLoss = result.totalRawTB - result.effectiveRawTB;
+        const unusedLoss = result.inactiveRawTB || 0;
+        const raidLoss = result.activeRawTB - result.effectiveRawTB;
         const ecLoss   = result.effectiveRawTB - result.usableTB;
         const usable   = result.usableTB;
         const total    = result.totalRawTB;
-        const pct = v => ((v / total) * 100).toFixed(1);
+        const pct = v => (total > 0 ? ((v / total) * 100) : 0).toFixed(1);
         const datasets = [
             { label: `Usable  ${pct(usable)}%`,  data: [usable],  backgroundColor: 'rgba(16,185,129,0.8)',  borderColor: 'rgba(16,185,129,1)',  borderWidth: 0, borderRadius: 4 },
             { label: `EC 손실  ${pct(ecLoss)}%`, data: [ecLoss],  backgroundColor: 'rgba(251,146,60,0.8)', borderColor: 'rgba(251,146,60,1)', borderWidth: 0, borderRadius: 4 },
         ];
+        if (unusedLoss > 0.001) datasets.push({ label: `미사용 드라이브  ${pct(unusedLoss)}%`, data: [unusedLoss], backgroundColor: 'rgba(148,163,184,0.65)', borderColor: 'rgba(148,163,184,1)', borderWidth: 0, borderRadius: 4 });
         if (raidLoss > 0.001) datasets.push({ label: `RAID 손실  ${pct(raidLoss)}%`, data: [raidLoss], backgroundColor: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,1)', borderWidth: 0, borderRadius: 4 });
         _chartStorage = new Chart(ctx, {
             type: 'bar', data: { labels: [''], datasets },
@@ -1280,7 +1288,10 @@
         const ctx = document.getElementById('chart-parity').getContext('2d');
         if (_chartParity) { _chartParity.destroy(); _chartParity = null; }
         const parityList = buildParityOptions(input.stripeSize);
-        const effRaw = input.driveSizeTB * input.drivesPerNode * input.nodeCount * CONFIG.raidEfficiency[input.raidType];
+        const activeRaw = result.activeRawTB !== undefined
+            ? result.activeRawTB
+            : input.driveSizeTB * Math.floor((input.drivesPerNode * input.nodeCount) / input.stripeSize) * input.stripeSize;
+        const effRaw = activeRaw * CONFIG.raidEfficiency[input.raidType];
         const usables = parityList.map(p => effRaw * ((input.stripeSize - p) / input.stripeSize));
         const isCur = p => p === input.parityShards;
         const h = Math.max(160, parityList.length * 44 + 24);
@@ -1456,6 +1467,11 @@
     }
 
     function renderResult(input, result) {
+        currentRenderedInput = { ...input };
+        currentRenderedResult = {
+            ...result,
+            warnings: result.warnings.map(w => ({ ...w })),
+        };
         renderEnvBanner(input.environment);
         renderActiveConfigBanner(input, result);
         renderStorage(result);
@@ -1929,6 +1945,12 @@
         const hasWarning  = result.warnings.some(w => w.level === 'warning');
         const statusLine  = hasCritical ? '❌ 심각한 구성 문제 있음' : hasWarning ? '⚠️ 일부 항목 권고 기준 미달' : '✅ 모든 항목 공식 권고 기준 충족';
         const maxParityNote = result.isMaxParity ? `  ⚠️ 최대 Parity 구성: Write Quorum = K+1 (${result.writeQuorum}드라이브), 장애허용 = ${result.driveFailureTolerance}드라이브\n` : null;
+        const unusedDriveNote = result.remainingDrives > 0
+            ? `  미사용 드라이브: ${result.remainingDrives}개 (${result.inactiveRawTB.toFixed(1)} TiB RAW) - Usable 계산 제외`
+            : null;
+        const raidModelNote = input.raidType !== 'JBOD'
+            ? `  ⚠️ RAID 참고: MinIO는 OS에 노출된 RAID 볼륨을 단일 드라이브처럼 인식할 수 있어 EC Set/장애 허용 계산은 실제 토폴로지와 다를 수 있습니다.`
+            : null;
         return [
             '══════════════════════════════════════════',
             '  MinIO AIStor 사이징 결과', `  생성일시: ${now}`,
@@ -1941,11 +1963,13 @@
             '■ 고객 요구 조건',
             `  ${getCustomerRequirementSummary(input)}`, '',
             '■ 스토리지 용량',
-            `  총 RAW: ${result.totalRawTB.toFixed(1)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(1)} TiB`,
+            `  총 RAW: ${result.totalRawTB.toFixed(1)} TiB / Set 편입 RAW: ${result.activeRawTB.toFixed(1)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(1)} TiB`,
+            unusedDriveNote,
             `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${result.usablePerNodeTB.toFixed(1)} TiB`, '',
             '■ EC 정보',
             `  Data ${result.dataShards} / Parity ${result.parityShards} / 장애허용: 최대 ${result.driveFailureTolerance}드라이브`,
             `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
+            raidModelNote,
             maxParityNote, '',
             '■ 네트워크 / 메모리',
             `  클러스터 처리량: ${fmtGBps(result.clusterThroughputGBps)} (노드당 ${fmtGBps(result.nodeNicThroughputGBps)})`,
@@ -1961,8 +1985,9 @@
     }
 
     function copyToClipboard() {
-        let input = readInputs(); input = validateInput(input);
-        const result = calculate(input); result.warnings = checkWarnings(input, result);
+        if (!currentRenderedInput || !currentRenderedResult) onInputChange();
+        const input = currentRenderedInput;
+        const result = currentRenderedResult;
         const text = buildExportText(input, result);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(() => showCopyFeedback(true)).catch(() => fallbackCopy(text));
