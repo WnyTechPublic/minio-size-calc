@@ -1345,6 +1345,22 @@
         const blockSize = `var(--drive-block-px, ${blockPx}px)`;
         const gridGap = `var(--drive-gap-px, ${gap}px)`;
 
+        // Set은 특정 노드에 몰리는 것처럼 보이지 않도록 드라이브 슬롯 우선으로 분산 배치한다.
+        // 예: 4노드 × 3드라이브, Stripe 8이면 N1~N4의 1번/2번 드라이브가 Set 1,
+        //     각 노드의 3번 드라이브가 미사용으로 표시된다.
+        const driveSetMap = Array.from({ length: nodeCount }, () => Array(drivesPerNode).fill(null));
+        const visualDriveOrder = [];
+        for (let j = 0; j < drivesPerNode; j++) {
+            for (let i = 0; i < nodeCount; i++) {
+                visualDriveOrder.push({ nodeIdx: i, driveSlot: j });
+            }
+        }
+        for (let idx = 0; idx < erasureSetCount * stripeSize; idx++) {
+            const drive = visualDriveOrder[idx];
+            if (!drive) break;
+            driveSetMap[drive.nodeIdx][drive.driveSlot] = Math.floor(idx / stripeSize);
+        }
+
         // ── 그리드 HTML 빌드 ──────────────────────────
         let grid = `<div style="display:inline-grid;
                         grid-template-columns:auto repeat(${drivesPerNode},${blockSize});
@@ -1360,10 +1376,9 @@
         for (let i = 0; i < nodeCount; i++) {
             grid += `<div style="font-size:9px;color:#9ca3af;text-align:right;padding-right:4px;white-space:nowrap;">N${i + 1}</div>`;
             for (let j = 0; j < drivesPerNode; j++) {
-                const driveIdx = i * drivesPerNode + j;
-                const setIdx   = Math.floor(driveIdx / stripeSize);
-                const isUsed   = setIdx < erasureSetCount;
-                const color    = PALETTE[setIdx % PALETTE.length];
+                const setIdx   = driveSetMap[i][j];
+                const isUsed   = setIdx !== null;
+                const color    = isUsed ? PALETTE[setIdx % PALETTE.length] : null;
                 const label    = isUsed ? `노드${i+1} · D${j+1} · Set ${setIdx+1}` : `노드${i+1} · D${j+1} · 미사용`;
                 const style    = isUsed
                     ? `background:${color};opacity:0.82;border-radius:3px;`
@@ -1456,7 +1471,7 @@
         } else if (remainingDrives > 0) {
             const wastePct = ((remainingDrives / totalDrives) * 100).toFixed(1);
             sumEl.innerHTML = `<span class="text-amber-600">⚠️ Set ${erasureSetCount}개 &nbsp;+&nbsp; 미사용 ${remainingDrives}드라이브 (${wastePct}% 낭비)</span>`;
-            descEl.textContent = `전체 ${totalDrives}드라이브 중 ${erasureSetCount * stripeSize}드라이브가 Set에 편입됩니다. 나머지 ${remainingDrives}드라이브는 MinIO가 사용하지 않습니다. 드라이브 수를 Stripe Size(${stripeSize})의 배수로 맞추면 낭비 없이 구성됩니다.`;
+            descEl.textContent = `전체 ${totalDrives}드라이브 중 ${erasureSetCount * stripeSize}드라이브가 Set에 편입됩니다. 나머지 ${remainingDrives}드라이브는 MinIO가 사용하지 않습니다. 그림은 Set별 드라이브가 노드 간 분산되는 개념도로 표시하며, 드라이브 수를 Stripe Size(${stripeSize})의 배수로 맞추면 낭비 없이 구성됩니다.`;
         } else if (erasureSetCount > 1) {
             sumEl.innerHTML = `<span class="text-emerald-600">✅ Set ${erasureSetCount}개 &nbsp;·&nbsp; ${totalDrives}드라이브 전체 사용</span>`;
             descEl.textContent = `${erasureSetCount}개의 독립 Erasure Set으로 구성됩니다. 각 Set은 서로 독립적으로 장애를 허용하며, Set 경계를 넘는 읽기/쓰기는 여러 Set에 분산됩니다.`;
