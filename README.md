@@ -10,7 +10,7 @@ MinIO AIStor 클러스터 도입 시 스펙 기반으로 스토리지 용량·�
 ### 계산 항목
 - **Usable 용량** — Erasure Coding + RAID 효율 적용 후 실제 사용 가능한 스토리지
 - **데이터 안정성** — 장애 허용 드라이브 수 / Write Quorum / MaxParity 케이스 자동 감지
-- **네트워크 처리량** — NIC 대역폭 기반 노드당·클러스터 이론 상한
+- **NIC 집계 대역폭** — NIC 규격 기반 노드당·클러스터 집계 대역폭
 - **동시 요청 수** — RAM 기반 최대 동시 처리 요청 수 (MinIO 공식 공식 적용)
 
 ### 시각화
@@ -45,7 +45,7 @@ index.html 다운로드 → 브라우저에서 열기 → 스펙 입력 → 결�
 | ① 클러스터 기본 정보 | 노드 수, 환경 구분 (운영/개발) |
 | ② 드라이브 구성 | 드라이브 타입, 용량 (TB/GB), 노드당 드라이브 수, RAID 구성 |
 | ③ EC 설정 | Stripe Size (2/4/8/16), Parity 수 |
-| ④ 메모리 / CPU / NIC | RAM, 물리코어 수, NIC 대역폭 |
+| ④ 메모리 / CPU / NIC | RAM, 물리코어 수, NIC 규격 |
 
 ---
 
@@ -58,7 +58,8 @@ Usable     = 유효 RAW × (Data 샤드 수 / Stripe Size)
 Data 샤드  = Stripe Size - Parity
 장애 허용  = Parity  (MaxParity 시 Parity - 1)
 Write Q    = Data    (MaxParity 시 Data + 1)
-처리량     = NIC(Gbps) / 8  →  GBps
+노드당 NIC 대역폭      = NIC 규격(Gbps)
+클러스터 NIC 집계 대역폭 = NIC 규격(Gbps) × 노드 수
 동시 요청  = RAM(GiB) × 1024 × 0.75 / 2
 ```
 

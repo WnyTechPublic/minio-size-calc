@@ -390,17 +390,17 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-600 mb-1.5">
-                                    NIC 대역폭
+                                    NIC 규격
                                     <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
-                                        data-tooltip="네트워크 대역폭이 전체 처리량의 하드 상한선입니다. 100G 이상 구성을 권고하며, 이상적으로는 400G입니다.">?</span>
+                                        data-tooltip="NIC 규격이 클러스터 네트워크 집계 대역폭의 기준입니다. 100GbE 이상 구성을 권고하며, 이상적으로는 400GbE입니다.">?</span>
                                 </label>
                                 <select id="nicGbps" class="field-input">
-                                    <option value="1">1G</option>
-                                    <option value="10">10G</option>
-                                    <option value="25">25G</option>
-                                    <option value="40">40G</option>
-                                    <option value="100" selected>100G (권고)</option>
-                                    <option value="400">400G (이상)</option>
+                                    <option value="1">1GbE</option>
+                                    <option value="10">10GbE</option>
+                                    <option value="25">25GbE</option>
+                                    <option value="40">40GbE</option>
+                                    <option value="100" selected>100GbE (권고)</option>
+                                    <option value="400">400GbE (이상)</option>
                                 </select>
                             </div>
                         </div>
@@ -445,11 +445,11 @@
                         <div id="kpi-fault" class="kpi-value text-amber-700">—</div>
                         <div id="kpi-fault-detail" class="kpi-sub text-amber-600">—</div>
                     </div>
-                    <!-- KPI 3: 클러스터 처리량 -->
+                    <!-- KPI 3: 클러스터 NIC 집계 대역폭 -->
                     <div class="kpi-card bg-gradient-to-br from-blue-50 to-sky-100 border-blue-200">
-                        <div class="kpi-label text-blue-500">클러스터 처리량</div>
+                        <div class="kpi-label text-blue-500">클러스터 NIC 집계 대역폭</div>
                         <div id="kpi-throughput" class="kpi-value text-blue-700">—</div>
-                        <div id="kpi-throughput-node" class="kpi-sub text-blue-500">노드당 — GBps</div>
+                        <div id="kpi-throughput-node" class="kpi-sub text-blue-500">노드당 — Gbps</div>
                     </div>
                 </div>
 
@@ -621,7 +621,7 @@
                             <p class="text-xs font-semibold text-gray-400 uppercase mb-2">네트워크</p>
                             <dl class="space-y-1.5 text-sm">
                                 <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">NIC</dt><dd id="sum-nic" class="sum-value font-medium text-gray-800">—</dd></div>
-                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">처리량 상한</dt><dd id="sum-net" class="sum-value font-medium text-gray-800">—</dd></div>
+                                <div class="flex justify-between gap-2"><dt class="text-gray-500 flex-shrink-0">NIC 집계 대역폭</dt><dd id="sum-net" class="sum-value font-medium text-gray-800">—</dd></div>
                             </dl>
                         </div>
                         <div>
@@ -865,8 +865,8 @@
         const writeQuorum           = isMaxParity ? (dataShards + 1) : dataShards;
         const readQuorum            = dataShards;
         const driveFailureTolerance = isMaxParity ? (parityShards - 1) : parityShards;
-        const nodeNicThroughputGBps    = nicGbps / 8;
-        const clusterThroughputGBps    = nodeNicThroughputGBps * nodeCount;
+        const nodeNicBandwidthGbps     = nicGbps;
+        const clusterNicAggregateGbps  = nodeNicBandwidthGbps * nodeCount;
         const maxConcurrentReqPerNode  = ramGiB * 1024 * 0.75 / 2;
         const maxConcurrentReqCluster  = maxConcurrentReqPerNode * nodeCount;
         const ratioVsRecommended       = (maxConcurrentReqPerNode / (CONFIG.defaults.ramGiB * 1024 * 0.75 / 2)) * 100;
@@ -874,7 +874,7 @@
             totalRawTB, activeRawTB, effectiveRawTB, inactiveRawTB, usableTB, usableRounded, storageEfficiencyPct, usablePerNodeTB,
             dataShards, parityShards, isMaxParity, writeQuorum, readQuorum, driveFailureTolerance,
             totalDrives, activeDrives, erasureSetCount, remainingDrives,
-            nodeNicThroughputGBps, clusterThroughputGBps,
+            nodeNicBandwidthGbps, clusterNicAggregateGbps,
             maxConcurrentReqPerNode, maxConcurrentReqCluster, ratioVsRecommended, warnings: [],
         };
     }
@@ -909,12 +909,12 @@
         } else { w.push({ level: 'ok', item: 'RAID 구성', message: 'JBOD' }); }
 
         if (t.minNicGbpsWarning === null) {
-            w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G — 개발 환경 NIC 기준 적용 안 함` });
+            w.push({ level: 'ok', item: 'NIC 규격', message: `${input.nicGbps}GbE — 개발 환경 NIC 기준 적용 안 함` });
         } else if (input.nicGbps < t.minNicGbpsCritical) {
-            w.push({ level: 'critical', item: 'NIC 대역폭', message: `${t.minNicGbpsCritical}G 미만 NIC는 처리량이 심각하게 제한됩니다 (노드당 최대 ${fmtGBps(result.nodeNicThroughputGBps)}). 공식 권고 ${t.minNicGbpsWarning}G 이상으로 교체를 강력 권고합니다.` });
+            w.push({ level: 'critical', item: 'NIC 규격', message: `${t.minNicGbpsCritical}GbE 미만 NIC는 집계 대역폭이 심각하게 제한됩니다 (노드당 ${fmtGbps(result.nodeNicBandwidthGbps)}). 공식 권고 ${t.minNicGbpsWarning}GbE 이상으로 교체를 강력 권고합니다.` });
         } else if (input.nicGbps < t.minNicGbpsWarning) {
-            w.push({ level: 'warning', item: 'NIC 대역폭', message: `공식 권고(${t.minNicGbpsWarning}G) 미달. 노드당 처리량 상한: ${fmtGBps(result.nodeNicThroughputGBps)}` });
-        } else { w.push({ level: 'ok', item: 'NIC 대역폭', message: `${input.nicGbps}G ≥ ${t.minNicGbpsWarning}G` }); }
+            w.push({ level: 'warning', item: 'NIC 규격', message: `공식 권고(${t.minNicGbpsWarning}GbE) 미달. 노드당 NIC 대역폭: ${fmtGbps(result.nodeNicBandwidthGbps)}` });
+        } else { w.push({ level: 'ok', item: 'NIC 규격', message: `${input.nicGbps}GbE ≥ ${t.minNicGbpsWarning}GbE` }); }
 
         if (input.parityShards < t.minParityHA) {
             w.push({ level: 'warning', item: 'Erasure Set HA', message: `EC:1 이하는 HA 구성 불충분. 최소 EC:${t.minParityHA} 이상 권고` });
@@ -967,8 +967,8 @@
         if ((n * 10) % 1 === 0) return n.toFixed(1);
         return n.toFixed(2);
     }
-    function fmtGBps(v) {
-        return parseFloat(v.toFixed(2)) + ' GBps';
+    function fmtGbps(v) {
+        return parseFloat(v.toFixed(2)) + ' Gbps';
     }
     function targetToTiB(value, unit) {
         return unit === 'PiB' ? value * 1024 : value;
@@ -1117,10 +1117,10 @@
     }
 
     function renderNetwork(result) {
-        setText('kpi-throughput',      fmtGBps(result.clusterThroughputGBps));
-        setText('kpi-throughput-node', `노드당 ${fmtGBps(result.nodeNicThroughputGBps)}`);
-        setText('net-node',    fmtGBps(result.nodeNicThroughputGBps));
-        setText('net-cluster', fmtGBps(result.clusterThroughputGBps));
+        setText('kpi-throughput',      fmtGbps(result.clusterNicAggregateGbps));
+        setText('kpi-throughput-node', `노드당 ${fmtGbps(result.nodeNicBandwidthGbps)}`);
+        setText('net-node',    fmtGbps(result.nodeNicBandwidthGbps));
+        setText('net-cluster', fmtGbps(result.clusterNicAggregateGbps));
     }
 
     /** EC 복구 정보 카드 + 데이터 안정성 KPI 갱신 */
@@ -1203,8 +1203,8 @@
         setText('sum-raw',        result.totalRawTB.toFixed(1) + ' TiB');
         setText('sum-eff-raw',    result.effectiveRawTB.toFixed(1) + ' TiB');
         setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
-        setText('sum-nic',        input.nicGbps + 'G');
-        setText('sum-net',        fmtGBps(result.clusterThroughputGBps));
+        setText('sum-nic',        input.nicGbps + 'GbE');
+        setText('sum-net',        fmtGbps(result.clusterNicAggregateGbps));
         setText('sum-ram',        input.ramGiB + ' GiB/노드');
         setText('sum-concurrent', Math.round(result.maxConcurrentReqPerNode).toLocaleString() + ' req/노드');
 
@@ -1959,7 +1959,7 @@
             '■ 클러스터 구성',
             `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB (${input.driveType}) / RAID: ${input.raidType}`,
             `  드라이브 모델: ${input.driveLabel || '직접 입력'}`,
-            `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}G`, '',
+            `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}GbE`, '',
             '■ 고객 요구 조건',
             `  ${getCustomerRequirementSummary(input)}`, '',
             '■ 스토리지 용량',
@@ -1972,7 +1972,7 @@
             raidModelNote,
             maxParityNote, '',
             '■ 네트워크 / 메모리',
-            `  클러스터 처리량: ${fmtGBps(result.clusterThroughputGBps)} (노드당 ${fmtGBps(result.nodeNicThroughputGBps)})`,
+            `  클러스터 NIC 집계 대역폭: ${fmtGbps(result.clusterNicAggregateGbps)} (노드당 ${fmtGbps(result.nodeNicBandwidthGbps)})`,
             `  클러스터 동시 요청: ${Math.round(result.maxConcurrentReqCluster).toLocaleString()} req (노드당 ${Math.round(result.maxConcurrentReqPerNode).toLocaleString()} req)`,
             `  권고 기준(256GiB) 대비: ${result.ratioVsRecommended.toFixed(0)}%`, '',
             '■ 권고 기준 체크리스트',
