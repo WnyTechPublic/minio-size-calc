@@ -64,15 +64,20 @@
         .kpi-value { font-size: 1.6rem; font-weight: 900; line-height: 1.1; }
         .kpi-sub   { font-size: 0.72rem; margin-top: 4px; opacity: 0.7; }
 
+        /* 용량 병기(TB / TiB). 주 단위는 원래 크기, 보조 단위는 축소해 큰 숫자의 시인성을 지킨다. */
+        .cap-primary   { white-space: nowrap; }
+        .cap-secondary { font-size: 0.62em; font-weight: 700; opacity: 0.72; white-space: nowrap; }
+        .cap-nowrap    { white-space: nowrap; }
+
         /* 결과 행 */
         .result-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; }
         .result-row + .result-row { border-top: 1px solid #f8fafc; }
         .result-label { font-size: 0.8rem; color: #6b7280; flex-shrink: 0; min-width: 110px; }
-        .result-value { font-size: 0.875rem; font-weight: 600; color: #111827; text-align: right; word-break: break-all; }
+        .result-value { font-size: 0.875rem; font-weight: 600; color: #111827; text-align: right; word-break: keep-all; overflow-wrap: break-word; }
 
         /* 체크리스트 */
         .warn-message { word-break: keep-all; overflow-wrap: break-word; line-height: 1.5; }
-        .sum-value { overflow-wrap: break-word; word-break: break-all; text-align: right; }
+        .sum-value { overflow-wrap: break-word; word-break: keep-all; text-align: right; }
 
         /* ── 독립 스크롤 레이아웃 (lg 이상) ── */
         body { overflow: hidden; }
@@ -193,7 +198,7 @@
                                     <option value="TiB" selected>TiB</option>
                                 </select>
                             </div>
-                            <p class="text-[11px] text-gray-400 -mt-1 mb-2">사이징 정책상 고객 요구 TB/PB는 동일 숫자의 TiB/PiB로 입력합니다. 물리 드라이브 TB/GB는 실제 용량 계산을 위해 TiB로 환산합니다. 고객이 요청한 Usable 용량을 그대로 입력하세요. 운영 여유분은 아래 <b>운영 여유율</b>에서 별도로 반영합니다.</p>
+                            <p class="text-[11px] text-gray-400 -mt-1 mb-2">사이징 정책상 고객 요구 TB/PB는 동일 숫자의 TiB/PiB로 입력합니다(요청 100TB → 100TiB 입력). 물리 드라이브 TB/GB는 실제 용량 계산을 위해 TiB로 환산합니다. 고객이 요청한 Usable 용량을 그대로 입력하세요. 운영 여유분은 아래 <b>운영 여유율</b>에서 별도로 반영합니다.<br><b class="text-gray-500">결과는 TB(십진 10<sup>12</sup>) / TiB(이진 2<sup>40</sup>)를 병기합니다.</b> 위 정책 때문에 목표 옆에 병기되는 TB 값은 고객이 말한 숫자보다 약 9.95% 큽니다.</p>
                             <div class="mt-3 pt-3 border-t border-red-100">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <span class="text-xs font-bold text-red-700 uppercase">고객 요구 조건</span>
@@ -577,7 +582,7 @@
                         <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
                             <span class="text-base">📊</span> 스토리지 분해
                         </h3>
-                        <p class="text-xs text-gray-400 mb-3">RAW 기준 Usable · EC · RAID 손실 비율</p>
+                        <p class="text-xs text-gray-400 mb-3">RAW 기준 Usable · EC · RAID 손실 비율 · 가로축 단위 TiB(막대에 마우스를 올리면 TB 병기)</p>
                         <div class="relative" style="height:180px;">
                             <canvas id="chart-storage"></canvas>
                         </div>
@@ -1061,14 +1066,58 @@
     function clampParity(currentParity, newStripeSize) {
         return Math.max(1, Math.min(currentParity || 1, Math.floor(newStripeSize / 2)));
     }
-    function formatCapacity(tib) {
-        if (tib >= 1024) return (tib / 1024).toFixed(2) + ' PiB';
-        if (tib >= 1023) return (Math.floor(tib * 1000) / 1000).toFixed(3) + ' TiB';
-        if (tib >= 10) return tib.toFixed(1) + ' TiB';
-        if (tib >= 1) return tib.toFixed(2) + ' TiB';
-        if (tib >= 0.01) return tib.toFixed(4) + ' TiB';
-        if (tib > 0) return Number(tib.toPrecision(3)) + ' TiB';
+    // ── 단위 환산 (TB 십진 ↔ TiB 이진) ────────────────
+    // 계산기 내부 용량 값은 전부 TiB(2^40) 기준이다(calculate() 주석 참고).
+    // TB(10^12)는 같은 물리 바이트량을 십진 단위로 표현한 값이며,
+    // 드라이브 제조사 표기 TB × 개수로 직접 계산한 값과 정확히 일치한다.
+    //   예) 3.84TB × 48개 = 184.32 TB = 167.638 TiB  (184.32e12 / 2^40)
+    const TB_PER_TIB = Math.pow(2, 40) / 1e12;   // 1.099511627776
+    function tibToTB(tib) { return tib * TB_PER_TIB; }
+
+    // TiB(이진) 단독 표기. 차트 축처럼 폭이 좁은 자리에서 쓴다.
+    function formatCapacityTiB(tib) {
+        const sign = tib < 0 ? '-' : '';
+        const v = Math.abs(tib);
+        if (v >= 1024) return sign + (v / 1024).toFixed(2) + ' PiB';
+        if (v >= 1023) return sign + (Math.floor(v * 1000) / 1000).toFixed(3) + ' TiB';
+        if (v >= 10) return sign + v.toFixed(1) + ' TiB';
+        if (v >= 1) return sign + v.toFixed(2) + ' TiB';
+        if (v >= 0.01) return sign + v.toFixed(4) + ' TiB';
+        if (v > 0) return sign + Number(v.toPrecision(3)) + ' TiB';
         return '0 TiB';
+    }
+    // TB(십진) 단독 표기. 인자는 TiB 값이며 내부에서 환산한다.
+    // PB 전환 지점은 TB 자체의 1000이 아니라 TiB 쪽 전환점(1024 TiB)에 맞춘다.
+    // TB만 1000에서 끊으면 909.5 TiB 구간이 '1.00 PB / 909.5 TiB'로 표기돼
+    // 같은 용량인데 자릿수가 어긋난 것처럼 보이기 때문이다.
+    function formatCapacityTB(tib) {
+        const tb = tibToTB(tib);
+        const sign = tb < 0 ? '-' : '';
+        const v = Math.abs(tb);
+        const vTiB = Math.abs(tib);
+        if (vTiB >= 1024) return sign + (v / 1000).toFixed(2) + ' PB';
+        if (vTiB >= 1023) return sign + (Math.floor(v * 1000) / 1000).toFixed(3) + ' TB';
+        if (v >= 10) return sign + v.toFixed(1) + ' TB';
+        if (v >= 1) return sign + v.toFixed(2) + ' TB';
+        if (v >= 0.01) return sign + v.toFixed(4) + ' TB';
+        if (v > 0) return sign + Number(v.toPrecision(3)) + ' TB';
+        return '0 TB';
+    }
+    // 결과 표시 기본형: 'TB(십진) / TiB(이진)' 한 줄 병기.
+    function formatCapacity(tib) {
+        return `${formatCapacityTB(tib)} / ${formatCapacityTiB(tib)}`;
+    }
+    // KPI·후보 카드의 큰 숫자용. TB를 주 크기, TiB를 보조 크기로 병기한다.
+    // 값이 숫자·단위 문자열뿐이라 이스케이프가 필요 없다.
+    function formatCapacityDualHtml(tib) {
+        // 두 span 사이의 공백이 유일한 줄바꿈 지점이다. 좁은 화면에서는
+        // 여기서 두 줄로 접히고, 숫자와 단위는 각 span 안에서 붙어 있다.
+        return `<span class="cap-primary">${formatCapacityTB(tib)}</span> `
+             + `<span class="cap-secondary">/ ${formatCapacityTiB(tib)}</span>`;
+    }
+    // 폭이 좁은 후보 카드 행용. 숫자와 단위는 붙여 두고 ' / ' 자리에서만 줄바꿈시킨다.
+    function formatCapacityWrapHtml(tib) {
+        return `<span class="cap-nowrap">${formatCapacityTB(tib)}</span> / <span class="cap-nowrap">${formatCapacityTiB(tib)}</span>`;
     }
     function fmtDriveSize(tb) {
         if (tb < 0.01) return parseFloat(tb.toFixed(5)).toString();
@@ -1095,12 +1144,14 @@
     }
     function getTargetRequirementLabel(input) {
         const value = parseFloat(input.targetUsable);
-        const displayValue = Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 6 }) : input.targetUsable;
+        const targetTiB = Number.isFinite(input.targetUsableTB)
+            ? input.targetUsableTB
+            : targetToTiB(Number.isFinite(value) ? value : 0, input.targetUnit);
         const buffer = input.operationalBufferPct || 0;
         const bufferLabel = buffer > 0
             ? ` · 운영 여유 ${buffer}% 반영(${formatCapacity(getRequiredUsableTB(input))} 이상)`
             : '';
-        return `목표 ${displayValue} ${input.targetUnit}${bufferLabel}`;
+        return `목표 ${formatCapacity(targetTiB)}${bufferLabel}`;
     }
     function tbToTiB(value) {
         return value * 1e12 / Math.pow(2, 40);
@@ -1282,7 +1333,7 @@
 
     function renderStorage(result) {
         if (!result.isErasureLayoutValid) {
-            setText('kpi-usable', '구성 불가');
+            setHtml('kpi-usable', '구성 불가');
             setText('kpi-efficiency', 'Stripe 구성을 확인하세요');
             setText('storage-raw', formatCapacity(result.totalRawTB));
             setText('storage-eff-raw', '—');
@@ -1292,7 +1343,7 @@
             return;
         }
         // KPI
-        setText('kpi-usable',    formatCapacity(result.usableTB));
+        setHtml('kpi-usable',    formatCapacityDualHtml(result.usableTB));
         setText('kpi-efficiency', `효율 ${result.storageEfficiencyPct.toFixed(1)}%`);
         // 세부
         setText('storage-raw',      formatCapacity(result.totalRawTB));
@@ -1465,7 +1516,7 @@
                     tooltip: { callbacks: { label: c => ` ${c.dataset.label.split('  ')[0]}: ${formatCapacity(c.raw)}` } },
                 },
                 scales: {
-                    x: { stacked: true, ticks: { callback: v => formatCapacity(v), font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.04)' } },
+                    x: { stacked: true, ticks: { callback: v => formatCapacityTiB(v), font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.04)' } },
                     y: { stacked: true, display: false },
                 },
             },
@@ -1486,7 +1537,7 @@
         document.getElementById('chart-parity-wrap').style.height = h + 'px';
         document.getElementById('chart-parity-subtitle').textContent =
             result.isErasureLayoutValid
-                ? `Stripe ${input.stripeSize} — 강조(빨간색): 현재 Parity ${input.parityShards} · 괄호 숫자는 장애 허용 드라이브 수`
+                ? `Stripe ${input.stripeSize} — 강조(빨간색): 현재 Parity ${input.parityShards} · 괄호 숫자는 장애 허용 드라이브 수 · 가로축 단위 TiB`
                 : `전체 드라이브 수가 Stripe ${input.stripeSize}로 나누어떨어지지 않아 비교할 수 없습니다.`;
         _chartParity = new Chart(ctx, {
             type: 'bar',
@@ -1511,7 +1562,7 @@
                     tooltip: { callbacks: { label: c => { const p = parityList[c.dataIndex]; const eff = (((input.stripeSize-p)/input.stripeSize)*100).toFixed(1); return ` ${formatCapacity(c.raw)} (효율 ${eff}%)`; } } },
                 },
                 scales: {
-                    x: { ticks: { callback: v => formatCapacity(v), font: { size: 10 }, maxTicksLimit: 4 }, grid: { color: 'rgba(0,0,0,0.04)' } },
+                    x: { ticks: { callback: v => formatCapacityTiB(v), font: { size: 10 }, maxTicksLimit: 4 }, grid: { color: 'rgba(0,0,0,0.04)' } },
                     y: { ticks: { font: { size: 11 } }, grid: { display: false } },
                 },
             },
@@ -1759,10 +1810,12 @@
             const headroomValue = bufferPct > 0 ? headroomTB : c.surplusTB;
             const headroomTone  = headroomValue < 0 ? 'text-red-600' : 'text-gray-700';
             const requiredRow   = bufferPct > 0
-                ? `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">요구 <span class="text-gray-400">여유 ${bufferPct}%</span></span><strong class="text-gray-700 tabular-nums whitespace-nowrap">${formatCapacity(requiredTB)}</strong></div>`
+                ? `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">요구 <span class="text-gray-400">여유 ${bufferPct}%</span></span><strong class="text-gray-700 tabular-nums text-right">${formatCapacityWrapHtml(requiredTB)}</strong></div>`
                 : '';
 
-            const row = (k, v) => `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">${k}</span><strong class="text-gray-700 tabular-nums whitespace-nowrap">${v}</strong></div>`;
+            // 값 쪽은 nowrap을 걸지 않는다. TB/TiB 병기가 카드 폭을 넘기 때문에
+            // ' / ' 자리에서 두 줄로 접히게 두고, 숫자+단위만 cap-nowrap으로 묶는다.
+            const row = (k, v) => `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">${k}</span><strong class="text-gray-700 tabular-nums text-right">${v}</strong></div>`;
             const divider = '<div class="border-t border-gray-100 my-2"></div>';
 
             return `<div class="rounded-xl border ${accent} p-3.5">
@@ -1774,16 +1827,17 @@
                 <div class="mt-2.5 text-[13px] font-semibold text-gray-800">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브</div>
                 <div class="text-[11px] text-gray-400">드라이브 ${c.result.totalDrives}개 · EC:${c.input.parityShards} · ${formatDriveCapacity(input)}</div>
 
-                <div class="mt-2.5 flex items-baseline justify-between gap-2">
-                    <span class="text-xl font-bold text-red-700 tabular-nums">${formatCapacity(c.result.usableTB)}</span>
-                    <span class="text-xs font-semibold text-red-600 tabular-nums">+${c.surplusPct.toFixed(1)}%</span>
+                <div class="mt-2.5 text-lg font-bold text-red-700 tabular-nums leading-tight">${formatCapacityDualHtml(c.result.usableTB)}</div>
+                <div class="flex items-baseline justify-between gap-2 text-[11px] text-gray-400">
+                    <span>Usable · 목표 대비</span>
+                    <span class="text-xs font-semibold text-red-600 tabular-nums whitespace-nowrap">+${c.surplusPct.toFixed(1)}%</span>
                 </div>
-                <div class="text-[11px] text-gray-400">Usable · 목표 ${formatCapacity(input.targetUsableTB)} 대비</div>
+                <div class="text-[11px] text-gray-400 leading-snug">목표 ${formatCapacityWrapHtml(input.targetUsableTB)}</div>
 
                 ${divider}
                 <div class="text-xs">
                     ${requiredRow}
-                    ${row('잔여', `<span class="${headroomTone}">${formatCapacity(headroomValue)}</span>`)}
+                    ${row('잔여', `<span class="${headroomTone}">${formatCapacityWrapHtml(headroomValue)}</span>`)}
                     ${row('장애 허용', `노드 ${nodeTolerance} · 드라이브 ${c.result.driveFailureTolerance}`)}
                     ${row('Erasure Set', `${c.result.dataShards}+${c.result.parityShards} × ${c.result.erasureSetCount}`)}
                 </div>
@@ -2214,12 +2268,22 @@
             '■ 고객 요구 조건',
             input.calculationMode === 'target' ? `  ${getTargetRequirementLabel(input)}` : null,
             `  ${getCustomerRequirementSummary(input)}`, '',
-            '■ 스토리지 용량',
-            `  총 RAW: ${formatCapacity(result.totalRawTB)} / Set 편입 RAW: ${result.isErasureLayoutValid ? formatCapacity(result.activeRawTB) : '구성 불가'} / 유효 RAW: ${result.isErasureLayoutValid ? formatCapacity(result.effectiveRawTB) : '구성 불가'}`,
+            // 용량은 'TB(십진) / TiB(이진)' 병기라 값 안에 이미 슬래시가 들어간다.
+            // 한 줄에 여러 항목을 슬래시로 이어 붙이면 구분이 안 되므로 항목마다 줄을 나눈다.
+            '■ 스토리지 용량  (표기: TB 십진 10^12 / TiB 이진 2^40)',
+            `  총 RAW        : ${formatCapacity(result.totalRawTB)}`,
+            `  Set 편입 RAW  : ${result.isErasureLayoutValid ? formatCapacity(result.activeRawTB) : '구성 불가'}`,
+            `  유효 RAW      : ${result.isErasureLayoutValid ? formatCapacity(result.effectiveRawTB) : '구성 불가'}`,
             invalidLayoutNote,
             result.isErasureLayoutValid
-                ? `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${formatCapacity(result.usablePerNodeTB)}`
-                : '  Usable: 구성 불가', '',
+                ? `  Usable (EC:${input.parityShards}) : ${formatCapacity(result.usableTB)} ★`
+                : '  Usable        : 구성 불가',
+            result.isErasureLayoutValid
+                ? `  노드당 Usable : ${formatCapacity(result.usablePerNodeTB)}`
+                : null,
+            result.isErasureLayoutValid
+                ? `  스토리지 효율 : ${result.storageEfficiencyPct.toFixed(1)}%`
+                : null, '',
             '■ EC 정보',
             ...ecExportLines,
             raidModelNote,
@@ -2299,6 +2363,7 @@
     }
 
     function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+    function setHtml(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
 
     // ── 초기화 ───────────────────────────────────────
 
