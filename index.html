@@ -193,12 +193,10 @@
                             <div class="grid grid-cols-[1fr_88px] gap-2 mb-3">
                                 <input id="targetUsable" type="number" min="1" step="1" value="100"
                                     class="field-input">
-                                <select id="targetUnit" class="field-input">
-                                    <option value="PiB">PiB</option>
-                                    <option value="TiB" selected>TiB</option>
-                                </select>
+                                <!-- 목표 단위는 TiB 고정. 선택지를 없애 입력 단위 혼선을 차단한다. -->
+                                <div class="field-input flex items-center justify-center font-semibold text-gray-500 bg-gray-50 cursor-default select-none" title="목표 용량 단위는 TiB로 고정입니다">TiB</div>
                             </div>
-                            <p class="text-[11px] text-gray-400 -mt-1 mb-2">사이징 정책상 고객 요구 TB/PB는 동일 숫자의 TiB/PiB로 입력합니다(요청 100TB → 100TiB 입력). 물리 드라이브 TB/GB는 실제 용량 계산을 위해 TiB로 환산합니다. 고객이 요청한 Usable 용량을 그대로 입력하세요. 운영 여유분은 아래 <b>운영 여유율</b>에서 별도로 반영합니다.<br><b class="text-gray-500">결과는 TB(십진 10<sup>12</sup>) / TiB(이진 2<sup>40</sup>)를 병기합니다.</b> 위 정책 때문에 목표 옆에 병기되는 TB 값은 고객이 말한 숫자보다 약 9.95% 큽니다.</p>
+                            <p class="text-[11px] text-gray-400 -mt-1 mb-2">사이징 정책상 고객 요구 TB는 동일 숫자의 TiB로 입력합니다(요청 100TB → 100 입력). PB 단위 요청은 TiB로 환산해 입력하세요(요청 1PB → 1024). 물리 드라이브 TB/GB는 실제 용량 계산을 위해 TiB로 환산합니다. 운영 여유분은 아래 <b>운영 여유율</b>에서 별도로 반영합니다.<br><b class="text-gray-500">결과는 TB(십진 10<sup>12</sup>) / TiB(이진 2<sup>40</sup>)를 병기합니다.</b> 위 정책 때문에 목표 옆에 병기되는 TB 값은 고객이 말한 숫자보다 약 9.95% 큽니다.</p>
                             <div class="mt-3 pt-3 border-t border-red-100">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <span class="text-xs font-bold text-red-700 uppercase">고객 요구 조건</span>
@@ -1075,11 +1073,10 @@
     function tibToTB(tib) { return tib * TB_PER_TIB; }
 
     // TiB(이진) 단독 표기. 차트 축처럼 폭이 좁은 자리에서 쓴다.
+    // 용량이 아무리 커도 PiB로 올리지 않고 TiB로만 표기한다(사내 표기 정책).
     function formatCapacityTiB(tib) {
         const sign = tib < 0 ? '-' : '';
         const v = Math.abs(tib);
-        if (v >= 1024) return sign + (v / 1024).toFixed(2) + ' PiB';
-        if (v >= 1023) return sign + (Math.floor(v * 1000) / 1000).toFixed(3) + ' TiB';
         if (v >= 10) return sign + v.toFixed(1) + ' TiB';
         if (v >= 1) return sign + v.toFixed(2) + ' TiB';
         if (v >= 0.01) return sign + v.toFixed(4) + ' TiB';
@@ -1087,16 +1084,17 @@
         return '0 TiB';
     }
     // TB(십진) 단독 표기. 인자는 TiB 값이며 내부에서 환산한다.
-    // PB 전환 지점은 TB 자체의 1000이 아니라 TiB 쪽 전환점(1024 TiB)에 맞춘다.
-    // TB만 1000에서 끊으면 909.5 TiB 구간이 '1.00 PB / 909.5 TiB'로 표기돼
-    // 같은 용량인데 자릿수가 어긋난 것처럼 보이기 때문이다.
+    // TiB 쪽과 마찬가지로 PB로 올리지 않고 TB로만 표기한다(사내 표기 정책).
     function formatCapacityTB(tib) {
-        const tb = tibToTB(tib);
+        // TiB를 거쳐 온 값이라 십진 직접 계산 대비 ~1e-16의 상대오차가 남는다.
+        // 배정밀도 유효자릿수(15~17) 안쪽인 15자리로 정규화해 그 오차를 흡수한다.
+        // 정규화가 없으면 마지막 자리가 어긋난다:
+        //   3.35TB × 3   → 10.049999999999999   → '10.0 TB'   (십진 직접값은 10.05 → 10.1)
+        //   46.87TB × 24 → 1124.8799999999999   → '1124.879 TB' (십진 직접값은 1124.880)
+        // TiB 쪽은 대조할 십진 기준값이 없고 배포본과 표기를 맞춰야 하므로 정규화하지 않는다.
+        const tb = Number(tibToTB(tib).toPrecision(15));
         const sign = tb < 0 ? '-' : '';
         const v = Math.abs(tb);
-        const vTiB = Math.abs(tib);
-        if (vTiB >= 1024) return sign + (v / 1000).toFixed(2) + ' PB';
-        if (vTiB >= 1023) return sign + (Math.floor(v * 1000) / 1000).toFixed(3) + ' TB';
         if (v >= 10) return sign + v.toFixed(1) + ' TB';
         if (v >= 1) return sign + v.toFixed(2) + ' TB';
         if (v >= 0.01) return sign + v.toFixed(4) + ' TB';
@@ -1135,6 +1133,8 @@
     function fmtGbps(v) {
         return parseFloat(v.toFixed(2)) + ' Gbps';
     }
+    // 목표 입력 단위는 TiB 고정이다(단위 선택 UI 제거됨).
+    // 호출부 호환을 위해 시그니처는 유지하되, PiB가 들어와도 안전하게 처리한다.
     function targetToTiB(value, unit) {
         return unit === 'PiB' ? value * 1024 : value;
     }
@@ -1158,7 +1158,7 @@
     }
     function readTargetUsableFromDom() {
         const value = parseFloat(document.getElementById('targetUsable')?.value) || CONFIG.defaults.targetUsable;
-        const unit = document.getElementById('targetUnit')?.value || CONFIG.defaults.targetUnit;
+        const unit = CONFIG.defaults.targetUnit;   // 목표 단위는 TiB 고정
         const bufferRaw = parseFloat(document.getElementById('operationalBufferPct')?.value);
         const buffer = Number.isFinite(bufferRaw) ? bufferRaw : CONFIG.targetSizing.operationalBufferPct;
         // 권장 드라이브 용량도 운영 여유를 포함한 요구 용량 기준으로 고른다.
@@ -1810,7 +1810,9 @@
             const headroomValue = bufferPct > 0 ? headroomTB : c.surplusTB;
             const headroomTone  = headroomValue < 0 ? 'text-red-600' : 'text-gray-700';
             const requiredRow   = bufferPct > 0
-                ? `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">요구 <span class="text-gray-400">여유 ${bufferPct}%</span></span><strong class="text-gray-700 tabular-nums text-right">${formatCapacityWrapHtml(requiredTB)}</strong></div>`
+                // 라벨에 nowrap을 걸지 않는다. 대용량(네 자리 TB)에서 '요구 여유 15%'가
+                // 통째로 붙어 있으면 값과 합쳐 카드 폭을 넘긴다. '여유 N%'만 묶어 둔다.
+                ? `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500">요구 <span class="text-gray-400 cap-nowrap">여유 ${bufferPct}%</span></span><strong class="text-gray-700 tabular-nums text-right">${formatCapacityWrapHtml(requiredTB)}</strong></div>`
                 : '';
 
             // 값 쪽은 nowrap을 걸지 않는다. TB/TiB 병기가 카드 폭을 넘기 때문에
@@ -1901,7 +1903,7 @@
         const rawVal = parseFloat(document.getElementById('driveSizeTB').value) || 0.01;
         const unit   = document.getElementById('driveUnit').value;
         const targetVal = parseFloat(document.getElementById('targetUsable').value) || CONFIG.defaults.targetUsable;
-        const targetUnit = document.getElementById('targetUnit').value;
+        const targetUnit = CONFIG.defaults.targetUnit;   // 목표 단위는 TiB 고정(선택 UI 없음)
         const driveSelectionMode = document.querySelector('input[name="driveSelectionMode"]:checked').value;
         const selectedDrive = getSelectedCatalogDrive();
         const catalogCapacity = parseFloat(document.getElementById('driveCatalogCapacity')?.value);
@@ -2140,7 +2142,6 @@
         const d = CONFIG.defaults;
         document.querySelector(`input[name="calculationMode"][value="${d.calculationMode}"]`).checked = true;
         document.getElementById('targetUsable').value    = d.targetUsable;
-        document.getElementById('targetUnit').value      = d.targetUnit;
         document.getElementById('customerPriority').value = d.customerPriority;
         document.getElementById('minFaultTolerance').value = d.minFaultTolerance;
         document.getElementById('maxNodeLimit').value = d.maxNodeLimit;
@@ -2176,7 +2177,7 @@
     function bindEvents() {
         populateDriveVendors();
         document.querySelectorAll('select').forEach(el => {
-            if (el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity' || el.id === 'targetUnit') return;
+            if (el.id === 'driveUnit' || el.id === 'driveType' || el.id === 'driveVendor' || el.id === 'driveModel' || el.id === 'driveCatalogCapacity') return;
             el.addEventListener('change', onInputChange);
         });
         document.querySelectorAll('input[type="radio"]').forEach(el => {
@@ -2202,10 +2203,6 @@
                 syncRecommendedCatalogCapacityForTarget();
                 onInputChange();
             }
-        });
-        document.getElementById('targetUnit').addEventListener('change', () => {
-            syncRecommendedCatalogCapacityForTarget();
-            onInputChange();
         });
         document.getElementById('stripeSize').addEventListener('input', function () {
             const newStripe = Math.max(CONFIG.stripeSize.min, Math.min(CONFIG.stripeSize.max, Math.round(parseInt(this.value) || CONFIG.defaults.stripeSize)));
