@@ -193,6 +193,7 @@
                                     <option value="TiB" selected>TiB</option>
                                 </select>
                             </div>
+                            <p class="text-[11px] text-gray-400 -mt-1 mb-2">사이징 정책상 고객 요구 TB/PB는 동일 숫자의 TiB/PiB로 입력합니다. 물리 드라이브 TB/GB는 실제 용량 계산을 위해 TiB로 환산합니다. 고객이 요청한 Usable 용량을 그대로 입력하세요. 운영 여유분은 아래 <b>운영 여유율</b>에서 별도로 반영합니다.</p>
                             <div class="mt-3 pt-3 border-t border-red-100">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <span class="text-xs font-bold text-red-700 uppercase">고객 요구 조건</span>
@@ -216,8 +217,13 @@
                                         <input id="maxNodeLimit" type="number" min="0" max="64" step="1" value="0"
                                             class="field-input">
                                     </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-500 mb-1">운영 여유율 (%)</label>
+                                        <input id="operationalBufferPct" type="number" min="0" max="100" step="1" value="15"
+                                            class="field-input">
+                                    </div>
                                 </div>
-                                <p class="text-[11px] text-gray-400 mt-1.5">최대 노드 수 0은 제한 없음입니다.</p>
+                                <p class="text-[11px] text-gray-400 mt-1.5">최대 노드 수 0은 제한 없음입니다. 운영 여유율은 목표 Usable 대비 추가로 확보할 용량으로, 추천 후보는 목표 × (1 + 여유율) 이상만 제시합니다.</p>
                             </div>
                         </div>
                         <div>
@@ -306,7 +312,7 @@
                             <div id="drive-manual-size-panel">
                                 <label class="block text-sm font-medium text-gray-600 mb-1.5">드라이브 용량</label>
                                 <div class="flex gap-2 mb-2">
-                                    <input id="driveSizeTB" type="number" min="0.01" step="0.01" value="30.72"
+                                    <input id="driveSizeTB" type="number" min="0.00001" step="0.01" value="30.72"
                                         class="field-input flex-1">
                                     <select id="driveUnit" class="field-input w-20 flex-shrink-0">
                                         <option value="TB" selected>TB</option>
@@ -316,7 +322,7 @@
                                 <div id="drive-preset-container" class="flex flex-wrap items-center gap-1">
                                     <span class="text-xs text-gray-400 font-medium">권고:</span>
                                 </div>
-                                <p class="text-xs text-gray-400 mt-1.5">※ 제조사 표기 TB 값을 단순 사이징 기준값으로 사용합니다. 실제 OS 인식 용량과 차이가 있을 수 있습니다.</p>
+                                <p class="text-xs text-gray-400 mt-1.5">※ 제조사 표기 TB/GB(십진 단위)를 TiB(이진 단위)로 환산해 계산합니다. 실제 OS 인식 용량은 포맷 및 시스템 예약 공간에 따라 추가 차이가 있을 수 있습니다.</p>
                             </div>
                         </div>
                         <div id="drive-count-panel">
@@ -336,11 +342,11 @@
                         <span class="badge">③</span>
                         EC (Erasure Coding) 설정
                         <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
-                            data-tooltip="Stripe Size는 하나의 Erasure Set을 구성하는 드라이브 수입니다. 2~16 사이 정수로 입력하며, Parity는 1~floor(Stripe/2) 범위에서 입력합니다. Data 샤드(K) = Stripe - Parity, Usable 효율 = K / Stripe입니다.">?</span>
+                            data-tooltip="Stripe Size는 하나의 Erasure Set을 구성하는 드라이브 수입니다. 이 계산기는 입력값을 수동 지정값으로 유지하며 자동 변경하지 않습니다. 실제 MinIO 자동 선택값을 검증할 때는 배포 topology의 Stripe를 입력하세요. Data 샤드(K) = Stripe - Parity입니다.">?</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3 mb-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1.5">Stripe Size (N)</label>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">Stripe Size (N, 수동 지정)</label>
                             <input id="stripeSize" type="number" min="2" max="16" step="1" value="16"
                                 class="field-input">
                         </div>
@@ -371,7 +377,9 @@
                                 <option value="32">32 GiB</option>
                                 <option value="64">64 GiB</option>
                                 <option value="128">128 GiB</option>
-                                <option value="256" selected>256 GiB (공식 권고)</option>
+                                <option value="256">256 GiB (공식 최소 권고)</option>
+                                <option value="288">288 GiB (구성안 최소)</option>
+                                <option value="384" selected>384 GiB (구성안 권장)</option>
                                 <option value="512">512 GiB</option>
                             </select>
                         </div>
@@ -390,18 +398,25 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-600 mb-1.5">
-                                    NIC 규격
+                                    NIC 링크 / 포트
                                     <span class="tooltip-icon inline-flex items-center justify-center w-3.5 h-3.5 text-xs text-gray-400 bg-gray-100 border border-gray-200 rounded-full cursor-help ml-1"
-                                        data-tooltip="NIC 규격이 클러스터 네트워크 집계 대역폭의 기준입니다. 100GbE 이상 구성을 권고하며, 이상적으로는 400GbE입니다.">?</span>
+                                        data-tooltip="링크 속도와 포트 수를 곱해 노드당 이론 집계 대역폭을 계산합니다. 이중화·트래픽 분리 구성에서는 실제 사용 가능한 대역폭이 더 낮을 수 있습니다.">?</span>
                                 </label>
-                                <select id="nicGbps" class="field-input">
-                                    <option value="1">1GbE</option>
-                                    <option value="10">10GbE</option>
-                                    <option value="25">25GbE</option>
-                                    <option value="40">40GbE</option>
-                                    <option value="100" selected>100GbE (권고)</option>
-                                    <option value="400">400GbE (이상)</option>
-                                </select>
+                                <div class="grid grid-cols-[1fr_74px] gap-2">
+                                    <select id="nicGbps" class="field-input">
+                                        <option value="1">1GbE</option>
+                                        <option value="10">10GbE</option>
+                                        <option value="25">25GbE</option>
+                                        <option value="40">40GbE</option>
+                                        <option value="100" selected>100GbE</option>
+                                        <option value="400">400GbE</option>
+                                    </select>
+                                    <select id="nicPortCount" class="field-input">
+                                        <option value="1">× 1</option>
+                                        <option value="2" selected>× 2</option>
+                                        <option value="4">× 4</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -661,7 +676,7 @@
                         <span class="text-sm font-semibold text-amber-800">주의사항</span>
                     </div>
                     <p class="text-xs text-amber-700 leading-relaxed ml-6">
-                        본 계산기의 수치는 MinIO 공식 문서 기반 계산식과 실제 EC 계산기 검증(7/7 케이스 일치)을 기반으로 한 추정치입니다.
+                        본 계산기의 수치는 MinIO 공식 문서 기반 계산식과 내부 회귀 검증을 기반으로 한 추정치입니다.
                         실제 용량·성능은 사용 환경, 워크로드 특성, 하드웨어 구성에 따라 크게 달라질 수 있으며,
                         정확한 사이징을 위해서는 PoC 환경에서의 실측을 권장합니다.
                     </p>
@@ -671,7 +686,7 @@
                            target="_blank" rel="noopener"
                            class="underline underline-offset-2 hover:text-amber-900">MinIO AIStor 공식 문서</a>
                         &nbsp;|&nbsp;
-                        EC 계산기 검증:
+                        참고 계산기:
                         <a href="https://min.io/product/erasure-code-calculator"
                            target="_blank" rel="noopener"
                            class="underline underline-offset-2 hover:text-amber-900">min.io/product/erasure-code-calculator</a>
@@ -689,20 +704,33 @@
         stripeSize: { min: 2, max: 16 },
         raidEfficiency: { JBOD: 1.0, RAID0: 1.0, RAID1: 0.5, RAID10: 0.5 },
         thresholds: {
-            production: { minCoresWarning: 8,  minRamGiBWarning: 256, minNicGbpsWarning: 100, minNicGbpsCritical: 25, minParityHA: 2, minNodes: 4 },
-            dev:        { minCoresWarning: 4,  minRamGiBWarning: 64,  minNicGbpsWarning: null, minNicGbpsCritical: null, minParityHA: 2, minNodes: null },
+            production: { minCoresWarning: 8,  minRamGiBWarning: 256, minNicGbpsWarning: 100, minNicGbpsCritical: 25, minParityHA: 2, minNodes: 4, minNodeFaultTolerance: 2 },
+            dev:        { minCoresWarning: 4,  minRamGiBWarning: 64,  minNicGbpsWarning: null, minNicGbpsCritical: null, minParityHA: 2, minNodes: null, minNodeFaultTolerance: null },
         },
         defaults: {
             nodeCount: 4, environment: 'production', driveType: 'NVMe', driveSizeTB: 30.72,
             driveSelectionMode: 'catalog', driveVendor: 'Samsung', driveModel: 'PM1733a / BM1743',
             drivesPerNode: 4, raidType: 'JBOD', stripeSize: 16, parityShards: 4,
-            ramGiB: 256, physicalCores: 64, nicGbps: 100,
+            ramGiB: 384, physicalCores: 64, nicGbps: 100, nicPortCount: 2,
             calculationMode: 'target', targetUsable: 100, targetUnit: 'TiB',
             customerPriority: 'balanced', minFaultTolerance: 2, maxNodeLimit: 0,
         },
         targetSizing: {
-            driveCountsPerNode: [4, 6, 8, 10, 12, 16, 20, 24, 36, 48, 60, 64],
+            driveCountsPerNode: [4, 6, 8, 10, 12, 14, 15, 16, 18, 20, 24, 36, 48, 60, 64],
             maxCandidates: 5,
+            // 고객 요청 Usable 대비 추가 확보 비율. 스토리지 부족을 막기 위한 운영 여유분이며
+            // 용량산정 엑셀(MinIO_용량산정.xlsx)의 초과율(15~36%)이 이 정책에서 나온 값이다.
+            operationalBufferPct: 15,
+            haSlots: 1,           // A~E 5칸 중 '고가용성'(노드 장애 2대 이상) 트랙에 보장할 최소 칸 수
+            // 노드 1대의 상대 비용. 서버 섀시·CPU·메모리·NIC 단가가 드라이브보다 훨씬 높으므로
+            // 노드 수를 줄이고 노드당 드라이브를 늘리는 방향을 우선한다.
+            // 60 = 목표 초과율 6%p와 동일한 가치. 값을 올리면 노드 최소화를 더 강하게 우선한다.
+            nodeCostWeight: 60,
+            // 성능/분산도 우선 기준. 집계 대역폭·동시 요청 수가 노드 수에 비례하므로
+            // 같은 총 드라이브라면 노드를 늘리는 방향이 유리하다. 다만 노드당 드라이브가
+            // MinIO 권장(8개 이상) 아래로 내려가면 서버만 늘어나므로 8개를 기준으로 잡는다.
+            performanceDrivesPerNode: 8,
+            performanceSpreadWeight: 40,
         },
         drivePresets: {
             NVMe: { sizes: [1.92, 3.84, 7.68, 15.36, 30.72, 61.44, 122.88], defaultSize: 30.72 },
@@ -847,13 +875,16 @@
 
     function calculate(input) {
         const { nodeCount, driveSizeTB, drivesPerNode, raidType, stripeSize, parityShards, ramGiB, nicGbps } = input;
+        const driveSizeTiB         = tbToTiB(driveSizeTB);
+        // 기존 렌더러 호환을 위해 *RawTB/usableTB 키 이름은 유지하지만, 아래 용량 값은 모두 TiB이다.
         const totalDrives          = drivesPerNode * nodeCount;
-        const erasureSetCount      = Math.floor(totalDrives / stripeSize);
         const remainingDrives      = totalDrives % stripeSize;
-        const activeDrives         = erasureSetCount * stripeSize;
-        const inactiveRawTB        = driveSizeTB * remainingDrives;
-        const totalRawTB           = driveSizeTB * totalDrives;
-        const activeRawTB          = driveSizeTB * activeDrives;
+        const isErasureLayoutValid = totalDrives >= stripeSize && remainingDrives === 0;
+        const erasureSetCount      = isErasureLayoutValid ? totalDrives / stripeSize : 0;
+        const activeDrives         = isErasureLayoutValid ? totalDrives : 0;
+        const totalRawTB           = driveSizeTiB * totalDrives;
+        const inactiveRawTB        = isErasureLayoutValid ? 0 : totalRawTB;
+        const activeRawTB          = driveSizeTiB * activeDrives;
         const raidFactor           = CONFIG.raidEfficiency[raidType];
         const effectiveRawTB       = activeRawTB * raidFactor;
         const dataShards           = stripeSize - parityShards;
@@ -865,17 +896,55 @@
         const writeQuorum           = isMaxParity ? (dataShards + 1) : dataShards;
         const readQuorum            = dataShards;
         const driveFailureTolerance = isMaxParity ? (parityShards - 1) : parityShards;
-        const nodeNicBandwidthGbps     = nicGbps;
+        const nodeNicBandwidthGbps     = nicGbps * (input.nicPortCount || 1);
         const clusterNicAggregateGbps  = nodeNicBandwidthGbps * nodeCount;
         const maxConcurrentReqPerNode  = ramGiB * 1024 * 0.75 / 2;
         const maxConcurrentReqCluster  = maxConcurrentReqPerNode * nodeCount;
-        const ratioVsRecommended       = (maxConcurrentReqPerNode / (CONFIG.defaults.ramGiB * 1024 * 0.75 / 2)) * 100;
+        const ratioVsRecommended       = (maxConcurrentReqPerNode / (CONFIG.thresholds.production.minRamGiBWarning * 1024 * 0.75 / 2)) * 100;
         return {
             totalRawTB, activeRawTB, effectiveRawTB, inactiveRawTB, usableTB, usableRounded, storageEfficiencyPct, usablePerNodeTB,
             dataShards, parityShards, isMaxParity, writeQuorum, readQuorum, driveFailureTolerance,
-            totalDrives, activeDrives, erasureSetCount, remainingDrives,
+            totalDrives, activeDrives, erasureSetCount, isErasureLayoutValid,
             nodeNicBandwidthGbps, clusterNicAggregateGbps,
             maxConcurrentReqPerNode, maxConcurrentReqCluster, ratioVsRecommended, warnings: [],
+        };
+    }
+
+    function getNodeFailureTolerance(input, result) {
+        if (!result.isErasureLayoutValid) return 0;
+        const baseDrivesPerNode = Math.floor(input.stripeSize / input.nodeCount);
+        const nodesWithExtraDrive = input.stripeSize % input.nodeCount;
+        let failedDrives = 0;
+        let toleratedNodes = 0;
+        for (let nodeIdx = 0; nodeIdx < input.nodeCount; nodeIdx++) {
+            const drivesInSet = nodeIdx < nodesWithExtraDrive ? baseDrivesPerNode + 1 : baseDrivesPerNode;
+            if (failedDrives + drivesInSet > result.driveFailureTolerance) break;
+            failedDrives += drivesInSet;
+            toleratedNodes++;
+        }
+        return toleratedNodes;
+    }
+
+    function getSetNodeDistribution(input, result) {
+        const counts = Array.from({ length: result.erasureSetCount }, () => Array(input.nodeCount).fill(0));
+        if (!result.isErasureLayoutValid) return { counts, isUneven: false, min: 0, max: 0, nodeFailureTolerance: 0 };
+        for (let driveIdx = 0; driveIdx < result.activeDrives; driveIdx++) {
+            counts[Math.floor(driveIdx / input.stripeSize)][driveIdx % input.nodeCount]++;
+        }
+        let min = Infinity;
+        let max = 0;
+        counts.forEach(row => {
+            row.forEach(count => {
+                min = Math.min(min, count);
+                max = Math.max(max, count);
+            });
+        });
+        return {
+            counts,
+            isUneven: min !== max,
+            min,
+            max,
+            nodeFailureTolerance: getNodeFailureTolerance(input, result),
         };
     }
 
@@ -920,14 +989,27 @@
             w.push({ level: 'warning', item: 'Erasure Set HA', message: `EC:1 이하는 HA 구성 불충분. 최소 EC:${t.minParityHA} 이상 권고` });
         } else { w.push({ level: 'ok', item: 'Erasure Set HA', message: `Parity ${input.parityShards} ≥ ${t.minParityHA}` }); }
 
-        if (result.erasureSetCount === 0) {
-            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 드라이브 수(${result.totalDrives})가 Stripe Size(${input.stripeSize})보다 작아 Erasure Set을 구성할 수 없습니다. Stripe Size를 낮추거나 드라이브/노드 수를 늘려주세요.` });
-        } else if (result.remainingDrives > 0) {
-            w.push({ level: 'warning', item: 'Erasure Set 구성', message: `전체 ${result.totalDrives}드라이브 중 ${result.erasureSetCount}개 Set(${result.activeDrives}드라이브)만 Usable 계산에 반영했습니다. 잔여 ${result.remainingDrives}드라이브(${result.inactiveRawTB.toFixed(1)} TiB RAW)는 MinIO에서 사용되지 않습니다. Stripe Size의 배수(${input.stripeSize}의 배수)로 맞춰주세요.` });
+        if (!result.isErasureLayoutValid) {
+            const validStripes = Array.from({ length: CONFIG.stripeSize.max - CONFIG.stripeSize.min + 1 }, (_, i) => i + CONFIG.stripeSize.min)
+                .filter(size => result.totalDrives % size === 0);
+            const reason = result.totalDrives < input.stripeSize
+                ? `전체 드라이브 수(${result.totalDrives})가 Stripe Size(${input.stripeSize})보다 작습니다.`
+                : `전체 드라이브 수(${result.totalDrives})가 Stripe Size(${input.stripeSize})로 나누어떨어지지 않습니다.`;
+            const alternatives = validStripes.length ? ` 가능한 Stripe: ${validStripes.join(', ')}.` : '';
+            w.push({ level: 'critical', item: 'Erasure Set 구성', message: `${reason} MinIO는 잔여 드라이브를 제외해 구성하지 않으며, 강제 Stripe가 전체 드라이브 수의 약수가 아니면 구성을 거부합니다.${alternatives}` });
         } else if (result.erasureSetCount > 1) {
             w.push({ level: 'ok', item: 'Erasure Set 구성', message: `다중 Set ${result.erasureSetCount}개 (${result.totalDrives}드라이브 ÷ Stripe ${input.stripeSize}). 모든 드라이브 사용.` });
         } else {
             w.push({ level: 'ok', item: 'Erasure Set 구성', message: `단일 Set (${result.totalDrives}드라이브 = Stripe ${input.stripeSize}). 모든 드라이브 사용.` });
+        }
+
+        const distribution = getSetNodeDistribution(input, result);
+        if (result.isErasureLayoutValid && t.minNodeFaultTolerance !== null) {
+            if (distribution.nodeFailureTolerance < t.minNodeFaultTolerance) {
+                w.push({ level: 'warning', item: '노드 장애 허용', message: `현재 topology는 임의의 노드 장애를 최대 ${distribution.nodeFailureTolerance}대까지 보장합니다. 구성안 권고는 ${t.minNodeFaultTolerance}대입니다. Set별 노드 참여: ${distribution.min}~${distribution.max}드라이브.` });
+            } else {
+                w.push({ level: 'ok', item: '노드 장애 허용', message: `임의의 노드 장애 최대 ${distribution.nodeFailureTolerance}대 보장` });
+            }
         }
 
         if (t.minNodes !== null) {
@@ -938,14 +1020,36 @@
             w.push({ level: 'ok', item: '개발 노드 수', message: `${input.nodeCount}노드 구성은 PoC/개발 기준으로 계산합니다. 운영 전환 시 4노드 이상으로 재검토하세요.` });
         }
 
+        if (input.calculationMode === 'target') {
+            if (input.sizingCandidateFound === false) {
+                w.push({ level: 'critical', item: '추천 후보', message: '현재 고객 요구 조건을 모두 만족하는 추천 후보가 없습니다. 아래 결과는 입력값 검토용이며 추천 구성으로 적용되지 않습니다.' });
+            }
+            if (input.maxNodeLimit > 0 && input.nodeCount > input.maxNodeLimit) {
+                w.push({ level: 'critical', item: '최대 노드 수', message: `현재 ${input.nodeCount}노드는 고객 제한 ${input.maxNodeLimit}노드를 초과합니다.` });
+            }
+            if (result.driveFailureTolerance < input.minFaultTolerance) {
+                w.push({ level: 'critical', item: '최소 장애 허용', message: `현재 장애 허용은 ${result.driveFailureTolerance}드라이브로 고객 요구 ${input.minFaultTolerance}드라이브에 미달합니다.` });
+            }
+        }
+
         if (input.calculationMode === 'target' && input.targetUsableTB > 0) {
             const surplusPct = ((result.usableTB - input.targetUsableTB) / input.targetUsableTB) * 100;
-            if (surplusPct >= 200) {
+            const requiredUsableTB = getRequiredUsableTB(input);
+            const buffer = input.operationalBufferPct || 0;
+            if (!result.isErasureLayoutValid) {
+                w.push({ level: 'critical', item: '목표 대비 용량', message: 'Erasure Set 구성이 유효하지 않아 목표 Usable 용량을 산정할 수 없습니다.' });
+            } else if (surplusPct < 0) {
+                w.push({ level: 'critical', item: '목표 대비 용량', message: `Usable ${formatCapacity(result.usableTB)}로 목표 ${formatCapacity(input.targetUsableTB)} 대비 ${Math.abs(surplusPct).toFixed(1)}% 부족합니다.` });
+            } else if (buffer > 0 && result.usableTB < requiredUsableTB) {
+                const shortPct = ((requiredUsableTB - result.usableTB) / requiredUsableTB) * 100;
+                w.push({ level: 'warning', item: '운영 여유율', message: `Usable ${formatCapacity(result.usableTB)}는 목표를 충족하지만, 운영 여유 ${buffer}%를 반영한 요구 용량 ${formatCapacity(requiredUsableTB)}에는 ${shortPct.toFixed(1)}% 부족합니다.` });
+            } else if (surplusPct >= 200) {
                 w.push({ level: 'critical', item: '목표 대비 용량', message: `Usable ${formatCapacity(result.usableTB)}로 목표 대비 +${surplusPct.toFixed(1)}%입니다. 비용/슬롯 절감 목적이 아니라면 더 작은 드라이브 용량을 검토하세요.` });
             } else if (surplusPct >= 100) {
                 w.push({ level: 'warning', item: '목표 대비 용량', message: `Usable ${formatCapacity(result.usableTB)}로 목표 대비 +${surplusPct.toFixed(1)}%입니다. 향후 증설 여유 목적이 아니라면 권장 용량을 우선 검토하세요.` });
             } else {
-                w.push({ level: 'ok', item: '목표 대비 용량', message: `목표 대비 +${surplusPct.toFixed(1)}% 여유 용량` });
+                const bufferNote = buffer > 0 ? ` (운영 여유 ${buffer}% 요구 ${formatCapacity(requiredUsableTB)} 충족)` : '';
+                w.push({ level: 'ok', item: '목표 대비 용량', message: `목표 대비 +${surplusPct.toFixed(1)}% 여유 용량${bufferNote}` });
             }
         }
         return w;
@@ -958,14 +1062,26 @@
         return Math.max(1, Math.min(currentParity || 1, Math.floor(newStripeSize / 2)));
     }
     function formatCapacity(tib) {
-        if (tib >= 1024) return (tib / 1024).toFixed(1) + ' PiB';
-        return Math.round(tib) + ' TiB';
+        if (tib >= 1024) return (tib / 1024).toFixed(2) + ' PiB';
+        if (tib >= 1023) return (Math.floor(tib * 1000) / 1000).toFixed(3) + ' TiB';
+        if (tib >= 10) return tib.toFixed(1) + ' TiB';
+        if (tib >= 1) return tib.toFixed(2) + ' TiB';
+        if (tib >= 0.01) return tib.toFixed(4) + ' TiB';
+        if (tib > 0) return Number(tib.toPrecision(3)) + ' TiB';
+        return '0 TiB';
     }
     function fmtDriveSize(tb) {
+        if (tb < 0.01) return parseFloat(tb.toFixed(5)).toString();
         const n = parseFloat(tb.toFixed(2));
         if (n % 1 === 0) return n.toFixed(0);
         if ((n * 10) % 1 === 0) return n.toFixed(1);
         return n.toFixed(2);
+    }
+    function formatDriveCapacity(input) {
+        if (input.driveSelectionMode === 'manual' && input.driveUnit === 'GB') {
+            return `${parseFloat((input.driveSizeTB * 1000).toFixed(2))}GB`;
+        }
+        return `${fmtDriveSize(input.driveSizeTB)}TB`;
     }
     function fmtGbps(v) {
         return parseFloat(v.toFixed(2)) + ' Gbps';
@@ -973,10 +1089,29 @@
     function targetToTiB(value, unit) {
         return unit === 'PiB' ? value * 1024 : value;
     }
+    // 고객 요청 Usable + 운영 여유율 = 실제로 확보해야 하는 용량
+    function getRequiredUsableTB(input) {
+        return (input.targetUsableTB || 0) * (1 + (input.operationalBufferPct || 0) / 100);
+    }
+    function getTargetRequirementLabel(input) {
+        const value = parseFloat(input.targetUsable);
+        const displayValue = Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 6 }) : input.targetUsable;
+        const buffer = input.operationalBufferPct || 0;
+        const bufferLabel = buffer > 0
+            ? ` · 운영 여유 ${buffer}% 반영(${formatCapacity(getRequiredUsableTB(input))} 이상)`
+            : '';
+        return `목표 ${displayValue} ${input.targetUnit}${bufferLabel}`;
+    }
+    function tbToTiB(value) {
+        return value * 1e12 / Math.pow(2, 40);
+    }
     function readTargetUsableFromDom() {
         const value = parseFloat(document.getElementById('targetUsable')?.value) || CONFIG.defaults.targetUsable;
         const unit = document.getElementById('targetUnit')?.value || CONFIG.defaults.targetUnit;
-        return targetToTiB(value, unit);
+        const bufferRaw = parseFloat(document.getElementById('operationalBufferPct')?.value);
+        const buffer = Number.isFinite(bufferRaw) ? bufferRaw : CONFIG.targetSizing.operationalBufferPct;
+        // 권장 드라이브 용량도 운영 여유를 포함한 요구 용량 기준으로 고른다.
+        return targetToTiB(value, unit) * (1 + Math.max(0, Math.min(100, buffer)) / 100);
     }
     function preferredCapacityForTarget(targetUsableTB) {
         if (targetUsableTB <= 150) return 3.84;
@@ -1000,11 +1135,14 @@
     }
     function validateInput(input) {
         input.nodeCount     = Math.max(1,    Math.min(64,  input.nodeCount     || 1));
-        input.driveSizeTB   = Math.max(0.01, input.driveSizeTB || 0.01);
+        const minDriveSizeTB = 0.00001;
+        input.driveSizeTB   = Math.max(minDriveSizeTB, input.driveSizeTB || minDriveSizeTB);
         input.drivesPerNode = Math.max(1,    Math.min(64,  input.drivesPerNode || 1));
         input.physicalCores = Math.max(4,    Math.min(256, input.physicalCores || 4));
         input.minFaultTolerance = Math.max(0, Math.min(8, Math.round(input.minFaultTolerance || 0)));
         input.maxNodeLimit = Math.max(0, Math.min(64, Math.round(input.maxNodeLimit || 0)));
+        input.operationalBufferPct = Math.max(0, Math.min(100,
+            Number.isFinite(input.operationalBufferPct) ? input.operationalBufferPct : CONFIG.targetSizing.operationalBufferPct));
         input.targetUsableTB = Math.max(1, input.targetUsableTB || targetToTiB(CONFIG.defaults.targetUsable, CONFIG.defaults.targetUnit));
         input.stripeSize = Math.round(input.stripeSize || CONFIG.defaults.stripeSize);
         input.stripeSize = Math.max(CONFIG.stripeSize.min, Math.min(CONFIG.stripeSize.max, input.stripeSize));
@@ -1023,6 +1161,8 @@
             : requestedMinNodes;
         const maxNodes = input.maxNodeLimit > 0 ? Math.min(64, input.maxNodeLimit) : 64;
         if (minNodes > maxNodes) return [];
+        // 고객 요청 Usable에 운영 여유율을 더한 값이 실제 충족 기준이다.
+        const requiredUsableTB = getRequiredUsableTB(input);
         const candidates = [];
 
         parityOptions.forEach(parityShards => {
@@ -1033,20 +1173,52 @@
 
                     const candidateInput = { ...input, nodeCount, drivesPerNode, parityShards };
                     const result = calculate(candidateInput);
-                    if (result.usableTB < input.targetUsableTB) return;
+                    if (result.usableTB < requiredUsableTB) return;
                     if (result.driveFailureTolerance < input.minFaultTolerance) return;
 
+                    // 표시용 초과율은 고객 요청 Usable 기준(엑셀 초과율과 같은 기준).
                     const surplusTB = result.usableTB - input.targetUsableTB;
                     const surplusPct = (surplusTB / input.targetUsableTB) * 100;
-                    candidates.push({ input: candidateInput, result, surplusTB, surplusPct });
+                    // 점수용 초과율은 여유율을 포함한 기준선 대비 낭비분이다.
+                    const excessOverRequiredPct = ((result.usableTB - requiredUsableTB) / requiredUsableTB) * 100;
+                    candidates.push({ input: candidateInput, result, surplusTB, surplusPct, excessOverRequiredPct });
                 });
             }
         });
 
-        return candidates
-            .map(c => ({ ...c, score: scoreSizingCandidate(c, input) }))
-            .sort((a, b) => a.score - b.score || a.surplusTB - b.surplusTB)
-            .slice(0, CONFIG.targetSizing.maxCandidates);
+        const scored = candidates
+            .map(c => ({ ...c, score: scoreSizingCandidate(c, input), track: getCandidateTrack(c, input) }))
+            .sort((a, b) => a.score - b.score || a.surplusTB - b.surplusTB);
+
+        return selectCandidatesByTrack(scored, CONFIG.targetSizing.maxCandidates);
+    }
+
+    // 트랙 분류. 기준값은 구성안 문서(2026-08-23 MinIO AIStor 구성안.md)의
+    // "노드 2개 이하 장애 허용 / 노드 1개 이하 장애 허용" 구분을 그대로 쓴다.
+    //   고가용성  : 노드 2대 이상 장애 허용
+    //   노드 절감 : 노드 1대 장애 허용 (노드 수를 줄인 구성)
+    function getCandidateTrack(candidate, sourceInput) {
+        if (sourceInput.environment !== 'production') return 'ha';
+        const required = CONFIG.thresholds.production.minNodeFaultTolerance;
+        const tolerance = getNodeFailureTolerance(candidate.input, candidate.result);
+        return tolerance >= required ? 'ha' : 'nodeSaving';
+    }
+
+    // 순위는 점수(노드 수 우선)에 맡기되, 고가용성 후보가 하나도 못 들어오면
+    // 마지막 칸을 고가용성 1위로 바꿔 비교 대안이 항상 보이게 한다.
+    function selectCandidatesByTrack(scored, maxCandidates) {
+        const picked = scored.slice(0, maxCandidates);
+        const haQuota = CONFIG.targetSizing.haSlots;
+        const haInPick = picked.filter(c => c.track === 'ha').length;
+        if (haInPick >= haQuota) return picked;
+
+        const haRest = scored.filter(c => c.track === 'ha' && !picked.includes(c));
+        for (let i = 0; i < haQuota - haInPick && haRest.length; i++) {
+            const dropIdx = picked.map(c => c.track).lastIndexOf('nodeSaving');
+            if (dropIdx <= 0) break;   // A안은 유지한다
+            picked.splice(dropIdx, 1, haRest.shift());
+        }
+        return picked;
     }
 
     function scoreSizingCandidate(candidate, sourceInput) {
@@ -1054,7 +1226,12 @@
         const defaultParity = Math.min(4, Math.floor(input.stripeSize / 2));
         const isMaxParity = input.stripeSize % 2 === 0 && input.parityShards === input.stripeSize / 2;
         const parityPenalty = Math.abs(input.parityShards - defaultParity) * 700 + (isMaxParity ? 300 : 0);
-        let score = surplusPct * 10 + Math.abs(input.drivesPerNode - 12) * 8 + input.nodeCount * 2 + result.totalDrives * 0.1;
+        // 노드 장애 허용은 점수로 감점하지 않는다. getCandidateTrack()에서 트랙으로 분류해
+        // 두 트랙을 모두 노출하므로, 여기서 다시 감점하면 한쪽 트랙이 후보에서 사라진다.
+        // 노드 수가 지배 항이다(노드 단가 > 드라이브 단가). 노드당 드라이브 수 자체는 벌하지 않는다.
+        // 낭비분은 '목표 + 운영 여유율' 기준선을 넘는 부분만 센다. 여유율 자체는 낭비가 아니다.
+        const wastePct = candidate.excessOverRequiredPct ?? surplusPct;
+        let score = wastePct * 10 + input.nodeCount * CONFIG.targetSizing.nodeCostWeight + result.totalDrives * 0.1;
         score += sourceInput.customerPriority === 'stability' ? parityPenalty * 0.25 : parityPenalty;
 
         if (sourceInput.customerPriority === 'cost') {
@@ -1062,12 +1239,11 @@
         } else if (sourceInput.customerPriority === 'stability') {
             score += (result.erasureSetCount < 2 ? 180 : 0) - result.driveFailureTolerance * 180 - input.nodeCount * 3 + (isMaxParity ? 700 : 0);
         } else if (sourceInput.customerPriority === 'performance') {
-            const desiredNodes = Math.min(sourceInput.maxNodeLimit > 0 ? sourceInput.maxNodeLimit : 8, 8);
-            score = surplusPct * 0.8
-                + Math.abs(input.drivesPerNode - 12) * 8
-                + result.totalDrives * 0.5
-                + Math.abs(input.nodeCount - desiredNodes) * 120
-                - result.erasureSetCount * 40
+            // 같은 총 드라이브라면 노드를 늘리고 노드당 드라이브를 줄일수록 분산도가 높아진다.
+            // 노드당 8드라이브(MinIO 권장 하한)를 기준으로 편차를 벌하고, 낭비분으로 규모를 제한한다.
+            score = wastePct * 10
+                + Math.abs(input.drivesPerNode - CONFIG.targetSizing.performanceDrivesPerNode)
+                    * CONFIG.targetSizing.performanceSpreadWeight
                 + parityPenalty;
         }
         return score;
@@ -1105,15 +1281,25 @@
     // ── 렌더링 ──────────────────────────────────────
 
     function renderStorage(result) {
+        if (!result.isErasureLayoutValid) {
+            setText('kpi-usable', '구성 불가');
+            setText('kpi-efficiency', 'Stripe 구성을 확인하세요');
+            setText('storage-raw', formatCapacity(result.totalRawTB));
+            setText('storage-eff-raw', '—');
+            setText('storage-usable', '구성 불가');
+            setText('storage-eff-pct', '—');
+            setText('storage-per-node', '—');
+            return;
+        }
         // KPI
         setText('kpi-usable',    formatCapacity(result.usableTB));
         setText('kpi-efficiency', `효율 ${result.storageEfficiencyPct.toFixed(1)}%`);
         // 세부
-        setText('storage-raw',      result.totalRawTB.toFixed(1) + ' TiB');
-        setText('storage-eff-raw',  result.effectiveRawTB.toFixed(1) + ' TiB');
+        setText('storage-raw',      formatCapacity(result.totalRawTB));
+        setText('storage-eff-raw',  formatCapacity(result.effectiveRawTB));
         setText('storage-usable',   formatCapacity(result.usableTB));
         setText('storage-eff-pct',  result.storageEfficiencyPct.toFixed(1) + '%');
-        setText('storage-per-node', result.usablePerNodeTB.toFixed(1) + ' TiB');
+        setText('storage-per-node', formatCapacity(result.usablePerNodeTB));
     }
 
     function renderNetwork(result) {
@@ -1124,37 +1310,40 @@
     }
 
     /** EC 복구 정보 카드 + 데이터 안정성 KPI 갱신 */
-    function renderEcResult(result) {
+    function renderEcResult(input, result) {
+        if (!result.isErasureLayoutValid) {
+            setText('kpi-fault', '구성 불가');
+            setText('kpi-fault-detail', '유효한 Stripe가 필요합니다');
+            setText('ec-dp', `Data ${result.dataShards} / Parity ${result.parityShards} (입력값)`);
+            setText('ec-fault', '—');
+            setText('ec-wq', '—');
+            setText('ec-set', '❌ 구성 불가');
+            return;
+        }
         // KPI 2: 데이터 안정성 — 장애 허용 드라이브 수가 핵심
         setText('kpi-fault',        `${result.driveFailureTolerance}드라이브`);
-        setText('kpi-fault-detail', `Write Quorum ${result.writeQuorum} / EC ${result.dataShards}+${result.parityShards}`);
+        const nodeFailureTolerance = getNodeFailureTolerance(input, result);
+        setText('kpi-fault-detail', `Write Quorum ${result.writeQuorum} / 노드 장애 ${nodeFailureTolerance}대`);
 
         // EC 복구 카드
         setText('ec-dp',    `Data ${result.dataShards} / Parity ${result.parityShards}`);
 
-        // 장애 허용 — MaxParity 시 M-1, 일반 시 M
+        // 장애 허용 — Data=Parity인 짝수 특수 구성은 M-1, 일반 구성은 M
         const ftLabel = result.isMaxParity
-            ? `최대 ${result.driveFailureTolerance}드라이브 (MaxParity: M-1)`
+            ? `최대 ${result.driveFailureTolerance}드라이브 (Data=Parity: M-1)`
             : `최대 ${result.driveFailureTolerance}드라이브`;
         setText('ec-fault', ftLabel);
 
-        // Write Quorum — MaxParity 시 K+1, 일반 시 K
+        // Write Quorum — Data=Parity인 짝수 특수 구성은 K+1, 일반 구성은 K
         const wqLabel = result.isMaxParity
-            ? `${result.writeQuorum}드라이브 (MaxParity: K+1)`
+            ? `${result.writeQuorum}드라이브 (Data=Parity: K+1)`
             : `${result.writeQuorum}드라이브`;
         setText('ec-wq', wqLabel);
 
         // Erasure Set 구성
-        let setLabel;
-        if (result.erasureSetCount === 0) {
-            setLabel = '⚠️ Set 구성 불가';
-        } else if (result.remainingDrives > 0) {
-            setLabel = `${result.erasureSetCount}개 + 미사용 ${result.remainingDrives}드라이브 ⚠️`;
-        } else {
-            setLabel = result.erasureSetCount > 1
-                ? `${result.erasureSetCount}개 Set (총 ${result.totalDrives}드라이브)`
-                : `단일 Set (${result.totalDrives}드라이브)`;
-        }
+        const setLabel = result.erasureSetCount > 1
+            ? `${result.erasureSetCount}개 Set (총 ${result.totalDrives}드라이브)`
+            : `단일 Set (${result.totalDrives}드라이브)`;
         setText('ec-set', setLabel);
     }
 
@@ -1193,17 +1382,17 @@
 
     function renderSummary(input, result) {
         setText('sum-nodes',      input.nodeCount + '대');
-        setText('sum-drives',     `${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB`);
+        setText('sum-drives',     `${input.drivesPerNode}EA × ${formatDriveCapacity(input)}`);
         setText('sum-drive-type', input.driveSelectionMode === 'catalog'
             ? `${input.driveLabel} / ${input.raidType}`
             : `${input.driveType} / ${input.raidType}`);
         setText('sum-priority',    getCustomerPriorityLabel(input.customerPriority));
         setText('sum-fault-req',   input.minFaultTolerance > 0 ? `${input.minFaultTolerance}드라이브 이상` : '제한 없음');
         setText('sum-node-limit',  input.maxNodeLimit > 0 ? `${input.maxNodeLimit}대 이하` : '제한 없음');
-        setText('sum-raw',        result.totalRawTB.toFixed(1) + ' TiB');
-        setText('sum-eff-raw',    result.effectiveRawTB.toFixed(1) + ' TiB');
-        setText('sum-usable-txt', `${formatCapacity(result.usableTB)} (EC:${input.parityShards})`);
-        setText('sum-nic',        input.nicGbps + 'GbE');
+        setText('sum-raw',        formatCapacity(result.totalRawTB));
+        setText('sum-eff-raw',    result.isErasureLayoutValid ? formatCapacity(result.effectiveRawTB) : '구성 불가');
+        setText('sum-usable-txt', result.isErasureLayoutValid ? `${formatCapacity(result.usableTB)} (EC:${input.parityShards})` : '구성 불가');
+        setText('sum-nic',        `${input.nicGbps}GbE × ${input.nicPortCount || 1}`);
         setText('sum-net',        fmtGbps(result.clusterNicAggregateGbps));
         setText('sum-ram',        input.ramGiB + ' GiB/노드');
         setText('sum-concurrent', Math.round(result.maxConcurrentReqPerNode).toLocaleString() + ' req/노드');
@@ -1224,22 +1413,21 @@
     }
 
     function renderEcInfo(result) {
+        if (!result.isErasureLayoutValid) {
+            document.getElementById('ec-info').innerHTML =
+                `<span class="text-red-700 font-semibold">❌ 전체 드라이브 수가 Stripe Size로 나누어떨어지지 않아 MinIO Erasure Set을 구성할 수 없습니다.</span>`;
+            return;
+        }
         const lines = [
             `<span class="font-bold text-gray-800">Data ${result.dataShards}</span> / <span class="font-bold text-gray-800">Parity ${result.parityShards}</span>`,
             `장애허용: 최대 <strong>${result.driveFailureTolerance}</strong>드라이브`,
             `Usable 효율: <strong>${result.storageEfficiencyPct.toFixed(1)}%</strong>`,
             `Write Quorum: <strong>${result.writeQuorum}</strong>드라이브 <span class="text-gray-400">/ Read: ${result.readQuorum}</span>`,
         ];
-        if (result.erasureSetCount === 0) {
-            lines.push(`<span class="text-amber-700 font-medium">⚠️ 전체 드라이브(${result.totalDrives})가 Stripe Size보다 작아 Set 구성 불가</span>`);
-        } else if (result.remainingDrives > 0) {
-            lines.push(`<span class="text-amber-700 font-medium">⚠️ Set <strong>${result.erasureSetCount}개</strong> + 미사용 <strong>${result.remainingDrives}</strong>드라이브</span>`);
-        } else {
-            const label = result.erasureSetCount > 1 ? `Set <strong>${result.erasureSetCount}개</strong> (다중)` : `Set <strong>1개</strong>`;
-            lines.push(`<span class="text-gray-500">${label} — 전체 ${result.totalDrives}드라이브 모두 사용</span>`);
-        }
+        const label = result.erasureSetCount > 1 ? `Set <strong>${result.erasureSetCount}개</strong> (다중)` : `Set <strong>1개</strong>`;
+        lines.push(`<span class="text-gray-500">${label} — 전체 ${result.totalDrives}드라이브 모두 사용</span>`);
         if (result.isMaxParity) {
-            lines.push(`<span class="text-amber-700 font-medium">⚠️ 최대 Parity: Write Quorum K+1 (${result.writeQuorum}드라이브), 장애허용 ${result.driveFailureTolerance}개</span>`);
+            lines.push(`<span class="text-amber-700 font-medium">⚠️ Data=Parity 특수 구성: Write Quorum K+1 (${result.writeQuorum}드라이브), 장애허용 ${result.driveFailureTolerance}개</span>`);
         }
         document.getElementById('ec-info').innerHTML = lines.join('<br>');
     }
@@ -1256,17 +1444,17 @@
     function renderStorageBreakdownChart(result) {
         const ctx = document.getElementById('chart-storage').getContext('2d');
         if (_chartStorage) { _chartStorage.destroy(); _chartStorage = null; }
-        const unusedLoss = result.inactiveRawTB || 0;
         const raidLoss = result.activeRawTB - result.effectiveRawTB;
         const ecLoss   = result.effectiveRawTB - result.usableTB;
         const usable   = result.usableTB;
         const total    = result.totalRawTB;
         const pct = v => (total > 0 ? ((v / total) * 100) : 0).toFixed(1);
-        const datasets = [
+        const datasets = result.isErasureLayoutValid ? [
             { label: `Usable  ${pct(usable)}%`,  data: [usable],  backgroundColor: 'rgba(16,185,129,0.8)',  borderColor: 'rgba(16,185,129,1)',  borderWidth: 0, borderRadius: 4 },
             { label: `EC 손실  ${pct(ecLoss)}%`, data: [ecLoss],  backgroundColor: 'rgba(251,146,60,0.8)', borderColor: 'rgba(251,146,60,1)', borderWidth: 0, borderRadius: 4 },
+        ] : [
+            { label: '구성 불가', data: [total], backgroundColor: 'rgba(239,68,68,0.7)', borderColor: 'rgba(239,68,68,1)', borderWidth: 0, borderRadius: 4 },
         ];
-        if (unusedLoss > 0.001) datasets.push({ label: `미사용 드라이브  ${pct(unusedLoss)}%`, data: [unusedLoss], backgroundColor: 'rgba(148,163,184,0.65)', borderColor: 'rgba(148,163,184,1)', borderWidth: 0, borderRadius: 4 });
         if (raidLoss > 0.001) datasets.push({ label: `RAID 손실  ${pct(raidLoss)}%`, data: [raidLoss], backgroundColor: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,1)', borderWidth: 0, borderRadius: 4 });
         _chartStorage = new Chart(ctx, {
             type: 'bar', data: { labels: [''], datasets },
@@ -1274,10 +1462,10 @@
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12, boxWidth: 10, boxHeight: 10 } },
-                    tooltip: { callbacks: { label: c => ` ${c.dataset.label.split('  ')[0]}: ${c.raw.toFixed(2)} TiB` } },
+                    tooltip: { callbacks: { label: c => ` ${c.dataset.label.split('  ')[0]}: ${formatCapacity(c.raw)}` } },
                 },
                 scales: {
-                    x: { stacked: true, ticks: { callback: v => v.toFixed(0) + ' T', font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.04)' } },
+                    x: { stacked: true, ticks: { callback: v => formatCapacity(v), font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.04)' } },
                     y: { stacked: true, display: false },
                 },
             },
@@ -1290,18 +1478,20 @@
         const parityList = buildParityOptions(input.stripeSize);
         const activeRaw = result.activeRawTB !== undefined
             ? result.activeRawTB
-            : input.driveSizeTB * Math.floor((input.drivesPerNode * input.nodeCount) / input.stripeSize) * input.stripeSize;
+            : tbToTiB(input.driveSizeTB) * Math.floor((input.drivesPerNode * input.nodeCount) / input.stripeSize) * input.stripeSize;
         const effRaw = activeRaw * CONFIG.raidEfficiency[input.raidType];
         const usables = parityList.map(p => effRaw * ((input.stripeSize - p) / input.stripeSize));
         const isCur = p => p === input.parityShards;
         const h = Math.max(160, parityList.length * 44 + 24);
         document.getElementById('chart-parity-wrap').style.height = h + 'px';
         document.getElementById('chart-parity-subtitle').textContent =
-            `Stripe ${input.stripeSize} — 강조(빨간색): 현재 Parity ${input.parityShards} · 괄호 숫자는 장애 허용 드라이브 수`;
+            result.isErasureLayoutValid
+                ? `Stripe ${input.stripeSize} — 강조(빨간색): 현재 Parity ${input.parityShards} · 괄호 숫자는 장애 허용 드라이브 수`
+                : `전체 드라이브 수가 Stripe ${input.stripeSize}로 나누어떨어지지 않아 비교할 수 없습니다.`;
         _chartParity = new Chart(ctx, {
             type: 'bar',
             data: {
-                // 라벨: P4 (최대 4대) — Parity = MaxParity면 M-1, 아니면 M
+                // 라벨: P4 (최대 4대) — Data=Parity인 짝수 특수 구성은 M-1, 아니면 M
                 labels: parityList.map(p => {
                     const isMax = (input.stripeSize % 2 === 0 && p === input.stripeSize / 2);
                     const ft    = isMax ? (p - 1) : p;
@@ -1330,14 +1520,17 @@
 
     /**
      * Erasure Set 드라이브 그리드 시각화.
-     * 노드(행) × 드라이브(열) 그리드에 Set별 색상 + 미사용 점선 표시.
+     * 노드(행) × 드라이브(열) 그리드에 Set별 색상 또는 구성 불가 상태를 표시.
      */
     function renderErasureSetVisual(input, result) {
         const { nodeCount, drivesPerNode, stripeSize } = input;
-        const { erasureSetCount, remainingDrives, totalDrives } = result;
+        const { erasureSetCount, totalDrives } = result;
 
         // Set 색상 팔레트
         const PALETTE = ['#10b981','#3b82f6','#8b5cf6','#f59e0b','#06b6d4','#ec4899','#f97316','#14b8a6'];
+        const getSetColor = setIdx => setIdx < PALETTE.length
+            ? PALETTE[setIdx]
+            : `hsl(${Math.round((setIdx * 137.508) % 360)} 70% 52%)`;
 
         // 드라이브 수에 따라 블록 크기 조정
         const blockPx = drivesPerNode <= 8 ? 24 : drivesPerNode <= 16 ? 18 : drivesPerNode <= 32 ? 13 : 10;
@@ -1345,21 +1538,12 @@
         const blockSize = `var(--drive-block-px, ${blockPx}px)`;
         const gridGap = `var(--drive-gap-px, ${gap}px)`;
 
-        // Set은 특정 노드에 몰리는 것처럼 보이지 않도록 드라이브 슬롯 우선으로 분산 배치한다.
-        // 예: 4노드 × 3드라이브, Stripe 8이면 N1~N4의 1번/2번 드라이브가 Set 1,
-        //     각 노드의 3번 드라이브가 미사용으로 표시된다.
-        const driveSetMap = Array.from({ length: nodeCount }, () => Array(drivesPerNode).fill(null));
-        const visualDriveOrder = [];
-        for (let j = 0; j < drivesPerNode; j++) {
-            for (let i = 0; i < nodeCount; i++) {
-                visualDriveOrder.push({ nodeIdx: i, driveSlot: j });
-            }
-        }
-        for (let idx = 0; idx < erasureSetCount * stripeSize; idx++) {
-            const drive = visualDriveOrder[idx];
-            if (!drive) break;
-            driveSetMap[drive.nodeIdx][drive.driveSlot] = Math.floor(idx / stripeSize);
-        }
+        const distribution = getSetNodeDistribution(input, result);
+        const hasUnevenNodeDistribution = distribution.isUneven;
+        const minDrivesPerNodeInSet = distribution.min;
+        const maxDrivesPerNodeInSet = distribution.max;
+        const requiredNodeFaultTolerance = input.environment === 'production' ? CONFIG.thresholds.production.minNodeFaultTolerance : 0;
+        const hasLimitedNodeFaultTolerance = result.isErasureLayoutValid && distribution.nodeFailureTolerance < requiredNodeFaultTolerance;
 
         // ── 그리드 HTML 빌드 ──────────────────────────
         let grid = `<div style="display:inline-grid;
@@ -1376,13 +1560,15 @@
         for (let i = 0; i < nodeCount; i++) {
             grid += `<div style="font-size:9px;color:#9ca3af;text-align:right;padding-right:4px;white-space:nowrap;">N${i + 1}</div>`;
             for (let j = 0; j < drivesPerNode; j++) {
-                const setIdx   = driveSetMap[i][j];
-                const isUsed   = setIdx !== null;
-                const color    = isUsed ? PALETTE[setIdx % PALETTE.length] : null;
-                const label    = isUsed ? `노드${i+1} · D${j+1} · Set ${setIdx+1}` : `노드${i+1} · D${j+1} · 미사용`;
+                // 드라이브 슬롯 우선순서(열 우선)로 Set 배치를 시각화한다.
+                const driveIdx = j * nodeCount + i;
+                const setIdx   = Math.floor(driveIdx / stripeSize);
+                const isUsed   = result.isErasureLayoutValid && setIdx < erasureSetCount;
+                const color    = getSetColor(setIdx);
+                const label    = isUsed ? `노드${i+1} · D${j+1} · Set ${setIdx+1}` : `노드${i+1} · D${j+1} · 구성 불가`;
                 const style    = isUsed
                     ? `background:${color};opacity:0.82;border-radius:3px;`
-                    : `background:transparent;border:1.5px dashed #d1d5db;border-radius:3px;`;
+                    : `background:#fef2f2;border:1.5px dashed #f87171;border-radius:3px;`;
                 grid += `<div title="${label}" style="width:${blockSize};height:${blockSize};${style}cursor:default;"></div>`;
             }
         }
@@ -1401,8 +1587,9 @@
                 <span class="text-xs text-gray-400">(Parity가 높을수록 보호↑ · 효율↓)</span>
             </div>`;
 
-            for (let s = 0; s < erasureSetCount; s++) {
-                const color = PALETTE[s % PALETTE.length];
+            const ratioDisplayCount = Math.min(erasureSetCount, 16);
+            for (let s = 0; s < ratioDisplayCount; s++) {
+                const color = getSetColor(s);
                 // hex → rgba 25% 투명도를 위해 인라인 opacity 사용
                 ratio += `
                 <div class="flex items-center gap-3">
@@ -1422,6 +1609,9 @@
                         <span style="color:#9ca3af;">(${parityPct.toFixed(0)}%)</span>
                     </div>
                 </div>`;
+            }
+            if (erasureSetCount > ratioDisplayCount) {
+                ratio += `<div class="text-xs text-gray-400 pl-[56px]">외 ${erasureSetCount - ratioDisplayCount}개 Set도 동일한 Data / Parity 구성을 사용합니다.</div>`;
             }
         }
         document.getElementById('es-ratio').innerHTML = ratio;
@@ -1447,34 +1637,34 @@
 
         // ── 범례 ─────────────────────────────────────
         let legend = '';
-        for (let s = 0; s < Math.min(erasureSetCount, PALETTE.length); s++) {
+        const legendLimit = Math.min(erasureSetCount, 16);
+        for (let s = 0; s < legendLimit; s++) {
             legend += `<div class="flex items-center gap-1.5">
-                <div style="width:10px;height:10px;background:${PALETTE[s]};border-radius:2px;flex-shrink:0;"></div>
+                <div style="width:10px;height:10px;background:${getSetColor(s)};border-radius:2px;flex-shrink:0;"></div>
                 <span class="text-xs text-gray-600">Set ${s + 1} &nbsp;<span class="text-gray-400">(${stripeSize}드라이브)</span></span>
             </div>`;
         }
-        if (remainingDrives > 0) {
+        if (erasureSetCount > legendLimit) {
             legend += `<div class="flex items-center gap-1.5">
-                <div style="width:10px;height:10px;border:1.5px dashed #d1d5db;border-radius:2px;flex-shrink:0;"></div>
-                <span class="text-xs text-gray-400">미사용 ${remainingDrives}드라이브</span>
+                <span class="text-xs text-gray-400">외 ${erasureSetCount - legendLimit}개 Set · 각 블록에 마우스를 올려 Set 번호 확인</span>
             </div>`;
         }
+        if (!result.isErasureLayoutValid) legend = '<span class="text-xs font-semibold text-red-600">❌ 입력한 Stripe로는 MinIO Set을 구성할 수 없습니다.</span>';
         document.getElementById('es-legend').innerHTML = legend;
 
         // ── 요약 + 설명 ──────────────────────────────
         const sumEl  = document.getElementById('es-summary');
         const descEl = document.getElementById('es-desc');
 
-        if (erasureSetCount === 0) {
-            sumEl.innerHTML = '<span class="text-red-600">⚠️ Set 구성 불가</span>';
-            descEl.textContent = `전체 드라이브 수(${totalDrives})가 Stripe Size(${stripeSize})보다 작아 Erasure Set을 구성할 수 없습니다. Stripe Size를 낮추거나 드라이브/노드 수를 늘려주세요.`;
-        } else if (remainingDrives > 0) {
-            const wastePct = ((remainingDrives / totalDrives) * 100).toFixed(1);
-            sumEl.innerHTML = `<span class="text-amber-600">⚠️ Set ${erasureSetCount}개 &nbsp;+&nbsp; 미사용 ${remainingDrives}드라이브 (${wastePct}% 낭비)</span>`;
-            descEl.textContent = `전체 ${totalDrives}드라이브 중 ${erasureSetCount * stripeSize}드라이브가 Set에 편입됩니다. 나머지 ${remainingDrives}드라이브는 MinIO가 사용하지 않습니다. 그림은 Set별 드라이브가 노드 간 분산되는 개념도로 표시하며, 드라이브 수를 Stripe Size(${stripeSize})의 배수로 맞추면 낭비 없이 구성됩니다.`;
+        if (!result.isErasureLayoutValid) {
+            sumEl.innerHTML = '<span class="text-red-600">❌ Set 구성 불가</span>';
+            descEl.textContent = `전체 ${totalDrives}드라이브가 Stripe ${stripeSize}로 나누어떨어지지 않습니다. MinIO는 일부 드라이브를 미사용 처리하지 않으며, 강제 Stripe가 약수가 아니면 구성을 거부합니다.`;
+        } else if (hasLimitedNodeFaultTolerance) {
+            sumEl.innerHTML = `<span class="text-amber-600">⚠️ Set ${erasureSetCount}개 &nbsp;·&nbsp; 노드 장애 ${distribution.nodeFailureTolerance}대 보장</span>`;
+            descEl.textContent = `입력한 Stripe ${stripeSize}를 유지한 개념도입니다. Set별 노드 참여가 ${minDrivesPerNodeInSet}~${maxDrivesPerNodeInSet}드라이브이므로 임의의 노드 장애는 최대 ${distribution.nodeFailureTolerance}대까지 보장합니다. 운영 구성안 권고는 ${requiredNodeFaultTolerance}대입니다.`;
         } else if (erasureSetCount > 1) {
-            sumEl.innerHTML = `<span class="text-emerald-600">✅ Set ${erasureSetCount}개 &nbsp;·&nbsp; ${totalDrives}드라이브 전체 사용</span>`;
-            descEl.textContent = `${erasureSetCount}개의 독립 Erasure Set으로 구성됩니다. 각 Set은 서로 독립적으로 장애를 허용하며, Set 경계를 넘는 읽기/쓰기는 여러 Set에 분산됩니다.`;
+            sumEl.innerHTML = `<span class="text-emerald-600">✅ Set ${erasureSetCount}개 &nbsp;·&nbsp; 노드 장애 ${distribution.nodeFailureTolerance}대 보장</span>`;
+            descEl.textContent = `${erasureSetCount}개의 독립 Erasure Set으로 구성됩니다. 객체 하나는 단일 Set에 기록되며, 여러 객체와 요청이 해시에 따라 여러 Set으로 분산됩니다.${hasUnevenNodeDistribution ? ` Set별 노드 참여는 ${minDrivesPerNodeInSet}~${maxDrivesPerNodeInSet}드라이브로 회전 분산됩니다.` : ''}`;
         } else {
             sumEl.innerHTML = `<span class="text-emerald-600">✅ 단일 Set &nbsp;·&nbsp; ${totalDrives}드라이브 전체 사용</span>`;
             descEl.textContent = `모든 드라이브가 하나의 Erasure Set으로 구성됩니다. Stripe ${stripeSize} 기준 Data ${result.dataShards} + Parity ${result.parityShards} 샤드로 최대 ${result.driveFailureTolerance}드라이브 장애를 허용합니다.`;
@@ -1492,7 +1682,7 @@
         renderStorage(result);
         renderNetwork(result);
         renderMemory(result);
-        renderEcResult(result);
+        renderEcResult(input, result);
         renderErasureSetVisual(input, result);
         renderWarnings(result.warnings);
         renderCharts(input, result);
@@ -1508,12 +1698,19 @@
             banner.innerHTML = '';
             return;
         }
+        if (input.sizingCandidateFound === false) {
+            banner.className = 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800';
+            banner.innerHTML =
+                `<span class="font-bold">추천 후보 없음:</span> 현재 결과는 입력값 검토용이며 추천 구성으로 적용되지 않습니다.` +
+                `<br><span class="text-xs font-medium text-amber-700">${getTargetRequirementLabel(input)} · 고객 조건: ${getCustomerRequirementSummary(input)}</span>`;
+            return;
+        }
         banner.className = 'rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800';
         banner.innerHTML =
             `<span class="font-bold">현재 결과 기준:</span> ` +
             `추천 A안 · ${input.nodeCount}노드 × ${input.drivesPerNode}드라이브 · ` +
             `EC:${input.parityShards} / Stripe ${input.stripeSize} · ${formatCapacity(result.usableTB)}` +
-            `<br><span class="text-xs font-medium text-red-600">고객 조건: ${getCustomerRequirementSummary(input)}</span>`;
+            `<br><span class="text-xs font-medium text-red-600">${getTargetRequirementLabel(input)} · 고객 조건: ${getCustomerRequirementSummary(input)}</span>`;
     }
 
     function renderTargetCandidates(input, candidates) {
@@ -1524,7 +1721,9 @@
         }
 
         card.classList.remove('hidden');
-        setText('target-candidates-subtitle', `추천 A안을 현재 결과에 적용합니다. 목표 ${formatCapacity(input.targetUsableTB)} 이상 · ${input.stripeSize}드라이브 Stripe 배수 · ${getCustomerRequirementSummary(input)} 기준`);
+        setText('target-candidates-subtitle', candidates.length
+            ? `추천 A안을 현재 결과에 적용합니다. ${getTargetRequirementLabel(input)} · ${input.stripeSize}드라이브 Stripe 배수 · ${getCustomerRequirementSummary(input)} 기준`
+            : `${getTargetRequirementLabel(input)} 및 고객 조건을 모두 만족하는 구성이 없습니다.`);
         setText('target-candidates-badge', candidates.length ? `상위 ${candidates.length}개` : '후보 없음');
 
         const list = document.getElementById('target-candidates-list');
@@ -1536,40 +1735,58 @@
         list.innerHTML = candidates.map((c, idx) => {
             const label = idx === 0 ? '추천 A안' : `${String.fromCharCode(65 + idx)}안`;
             const accent = idx === 0 ? 'border-red-200 bg-red-50/50' : 'border-gray-200 bg-white';
-            const neededRawTB = input.targetUsableTB / (c.result.dataShards / c.input.stripeSize);
-            const neededDriveCount = Math.ceil(neededRawTB / input.driveSizeTB);
+            const requiredUsableTB = getRequiredUsableTB(input);
+            const neededRawTiB = requiredUsableTB / (c.result.dataShards / c.input.stripeSize);
+            const neededDriveCount = Math.ceil(neededRawTiB / (tbToTiB(input.driveSizeTB) * CONFIG.raidEfficiency[input.raidType]));
             const roundedDriveCount = c.result.totalDrives;
             const appliedBadge = idx === 0
                 ? '<span class="text-[11px] font-bold text-white bg-red-500 rounded-md px-1.5 py-0.5">현재 적용 중</span>'
                 : '';
             const roundNote = idx === 0 && roundedDriveCount > neededDriveCount
-                ? `<div class="mt-2 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">목표 달성에는 약 ${neededDriveCount}개 드라이브가 필요하지만, Stripe ${c.input.stripeSize} 배수 구성을 위해 ${roundedDriveCount}개로 올림했습니다.</div>`
+                ? `<div class="mt-2.5 rounded-lg bg-white/70 border border-red-100 px-2 py-1.5 text-[11px] leading-relaxed text-gray-500">필요 ${neededDriveCount}개 → Stripe ${c.input.stripeSize} 배수로 ${roundedDriveCount}개 올림</div>`
                 : '';
-            const reasonTags = idx === 0 ? [
-                '목표 용량 충족',
-                getCustomerPriorityLabel(input.customerPriority),
-                `EC:${c.input.parityShards}`,
-                c.result.remainingDrives === 0 ? 'Stripe 배수 구성' : `미사용 ${c.result.remainingDrives}드라이브`,
-                c.result.driveFailureTolerance >= input.minFaultTolerance ? `장애 허용 ${c.result.driveFailureTolerance}드라이브` : '장애 허용 미달',
-                c.surplusPct <= 20 ? '초과율 낮음' : '여유 용량 큼',
-            ] : [];
-            const reasonHtml = reasonTags.length
-                ? `<div class="flex flex-wrap gap-1 mt-2">${reasonTags.map(tag => `<span class="rounded-md border border-red-100 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-red-700">${tag}</span>`).join('')}</div>`
+            const nodeTolerance = getNodeFailureTolerance(c.input, c.result);
+            const bufferPct  = input.operationalBufferPct || 0;
+            const requiredTB = getRequiredUsableTB(input);
+            const headroomTB = c.result.usableTB - requiredTB;
+
+            const isNodeSaving = c.track === 'nodeSaving';
+            const trackLabel = isNodeSaving ? '노드 절감' : '고가용성';
+            const trackTone  = isNodeSaving
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-sky-200 bg-sky-50 text-sky-700';
+
+            const headroomValue = bufferPct > 0 ? headroomTB : c.surplusTB;
+            const headroomTone  = headroomValue < 0 ? 'text-red-600' : 'text-gray-700';
+            const requiredRow   = bufferPct > 0
+                ? `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">요구 <span class="text-gray-400">여유 ${bufferPct}%</span></span><strong class="text-gray-700 tabular-nums whitespace-nowrap">${formatCapacity(requiredTB)}</strong></div>`
                 : '';
-            return `<div class="rounded-xl border ${accent} p-3">
-                <div class="flex items-center justify-between gap-2 mb-2">
+
+            const row = (k, v) => `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 whitespace-nowrap">${k}</span><strong class="text-gray-700 tabular-nums whitespace-nowrap">${v}</strong></div>`;
+            const divider = '<div class="border-t border-gray-100 my-2"></div>';
+
+            return `<div class="rounded-xl border ${accent} p-3.5">
+                <div class="flex items-start justify-between gap-2">
                     <span class="text-sm font-bold text-gray-800 flex items-center gap-1.5 min-w-0">${label}${appliedBadge}</span>
-                    <span class="text-xs font-semibold text-red-600">+${c.surplusPct.toFixed(1)}%</span>
+                    <span class="rounded-md border ${trackTone} px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap">${trackLabel}</span>
                 </div>
-                <div class="text-sm font-semibold text-gray-700 mb-1">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브 · EC:${c.input.parityShards}</div>
-                <div class="space-y-1 text-xs text-gray-500">
-                    <div class="flex justify-between gap-2"><span>총 드라이브</span><strong class="text-gray-700">${c.result.totalDrives}개</strong></div>
-                    <div class="flex justify-between gap-2"><span>Usable</span><strong class="text-red-700">${formatCapacity(c.result.usableTB)}</strong></div>
-                    <div class="flex justify-between gap-2"><span>여유 용량</span><strong class="text-gray-700">${formatCapacity(c.surplusTB)}</strong></div>
-                    <div class="flex justify-between gap-2"><span>Data / Parity</span><strong class="text-gray-700">${c.result.dataShards} / ${c.result.parityShards}</strong></div>
-                    <div class="flex justify-between gap-2"><span>Erasure Set</span><strong class="text-gray-700">${c.result.erasureSetCount}개</strong></div>
+
+                <div class="mt-2.5 text-[13px] font-semibold text-gray-800">${c.input.nodeCount}노드 × ${c.input.drivesPerNode}드라이브</div>
+                <div class="text-[11px] text-gray-400">드라이브 ${c.result.totalDrives}개 · EC:${c.input.parityShards} · ${formatDriveCapacity(input)}</div>
+
+                <div class="mt-2.5 flex items-baseline justify-between gap-2">
+                    <span class="text-xl font-bold text-red-700 tabular-nums">${formatCapacity(c.result.usableTB)}</span>
+                    <span class="text-xs font-semibold text-red-600 tabular-nums">+${c.surplusPct.toFixed(1)}%</span>
                 </div>
-                ${reasonHtml}
+                <div class="text-[11px] text-gray-400">Usable · 목표 ${formatCapacity(input.targetUsableTB)} 대비</div>
+
+                ${divider}
+                <div class="text-xs">
+                    ${requiredRow}
+                    ${row('잔여', `<span class="${headroomTone}">${formatCapacity(headroomValue)}</span>`)}
+                    ${row('장애 허용', `노드 ${nodeTolerance} · 드라이브 ${c.result.driveFailureTolerance}`)}
+                    ${row('Erasure Set', `${c.result.dataShards}+${c.result.parityShards} × ${c.result.erasureSetCount}`)}
+                </div>
                 ${roundNote}
             </div>`;
         }).join('');
@@ -1643,6 +1860,10 @@
             customerPriority: document.getElementById('customerPriority').value,
             minFaultTolerance: parseInt(document.getElementById('minFaultTolerance').value) || 0,
             maxNodeLimit: parseInt(document.getElementById('maxNodeLimit').value) || 0,
+            operationalBufferPct: (() => {
+                const v = parseFloat(document.getElementById('operationalBufferPct')?.value);
+                return Number.isFinite(v) ? v : CONFIG.targetSizing.operationalBufferPct;
+            })(),
             nodeCount:     parseInt(document.getElementById('nodeCount').value)     || 1,
             environment:   document.querySelector('input[name="environment"]:checked').value,
             driveSelectionMode,
@@ -1650,6 +1871,7 @@
             driveModel:    selectedDrive ? selectedDrive.model : null,
             driveLabel:    driveSelectionMode === 'catalog' && selectedDrive ? `${selectedDrive.vendor} ${selectedDrive.model}` : '직접 입력',
             driveType:     driveSelectionMode === 'catalog' && selectedDrive ? selectedDrive.driveType : document.getElementById('driveType').value,
+            driveUnit:     driveSelectionMode === 'catalog' ? 'TB' : unit,
             driveSizeTB:   driveSelectionMode === 'catalog' && catalogCapacity ? catalogCapacity : manualDriveSizeTB,
             drivesPerNode: parseInt(document.getElementById('drivesPerNode').value) || 1,
             raidType:      document.getElementById('raidType').value,
@@ -1658,6 +1880,7 @@
             ramGiB:        parseInt(document.getElementById('ramGiB').value),
             physicalCores: parseInt(document.getElementById('physicalCores').value) || 4,
             nicGbps:       parseInt(document.getElementById('nicGbps').value),
+            nicPortCount:  parseInt(document.getElementById('nicPortCount').value) || 1,
         };
     }
 
@@ -1669,7 +1892,7 @@
         if (input.calculationMode === 'target') {
             const candidates = generateSizingCandidates(input, { varyParity: false });
             const ecRecommendations = recommendEcOptions(input);
-            const activeInput = candidates[0]?.input || input;
+            const activeInput = { ...(candidates[0]?.input || input), sizingCandidateFound: candidates.length > 0 };
             syncEcInputs(activeInput);
             const result = calculate(activeInput); result.warnings = checkWarnings(activeInput, result);
             renderResult(activeInput, result);
@@ -1867,6 +2090,7 @@
         document.getElementById('customerPriority').value = d.customerPriority;
         document.getElementById('minFaultTolerance').value = d.minFaultTolerance;
         document.getElementById('maxNodeLimit').value = d.maxNodeLimit;
+        document.getElementById('operationalBufferPct').value = CONFIG.targetSizing.operationalBufferPct;
         document.getElementById('nodeCount').value      = d.nodeCount;
         document.querySelector(`input[name="driveSelectionMode"][value="${d.driveSelectionMode}"]`).checked = true;
         populateDriveVendors(d.driveVendor);
@@ -1875,6 +2099,7 @@
         populateDriveCapacities(d.driveModel);
         document.getElementById('driveType').value      = d.driveType;
         document.getElementById('driveUnit').value      = 'TB';
+        document.getElementById('driveSizeTB').min      = '0.00001';
         document.getElementById('driveSizeTB').step     = d.driveType === 'HDD' ? '1' : '0.01';
         document.getElementById('drivesPerNode').value  = d.drivesPerNode;
         document.getElementById('raidType').value       = d.raidType;
@@ -1883,6 +2108,7 @@
         document.getElementById('ramGiB').value         = d.ramGiB;
         document.getElementById('physicalCores').value  = d.physicalCores;
         document.getElementById('nicGbps').value        = d.nicGbps;
+        document.getElementById('nicPortCount').value   = d.nicPortCount;
         const envRadio = document.querySelector(`input[name="environment"][value="${d.environment}"]`);
         if (envRadio) envRadio.checked = true;
         updateDrivePresets(d.driveType);
@@ -1909,6 +2135,8 @@
         document.querySelectorAll('input[type="number"]').forEach(el => {
             if (el.id === 'targetUsable') return;
             el.addEventListener('blur', onInputChange);
+            // 스피너 화살표로 값을 바꿔도 즉시 반영되도록 change도 함께 받는다.
+            el.addEventListener('change', onInputChange);
             el.addEventListener('keydown', e => { if (e.key === 'Enter') onInputChange(); });
         });
         document.getElementById('targetUsable').addEventListener('blur', () => {
@@ -1932,7 +2160,9 @@
         document.getElementById('driveUnit').addEventListener('change', function () {
             const sizeInput = document.getElementById('driveSizeTB');
             const val = parseFloat(sizeInput.value) || 0;
-            sizeInput.value = this.value === 'GB' ? (val * 1000).toFixed(0) : (val / 1000).toFixed(2);
+            const converted = this.value === 'GB' ? val * 1000 : val / 1000;
+            sizeInput.min = this.value === 'GB' ? '0.01' : '0.00001';
+            sizeInput.value = String(parseFloat(converted.toPrecision(12)));
             onInputChange();
         });
         document.getElementById('driveVendor').addEventListener('change', function () {
@@ -1959,9 +2189,15 @@
         const hasCritical = result.warnings.some(w => w.level === 'critical');
         const hasWarning  = result.warnings.some(w => w.level === 'warning');
         const statusLine  = hasCritical ? '❌ 심각한 구성 문제 있음' : hasWarning ? '⚠️ 일부 항목 권고 기준 미달' : '✅ 모든 항목 공식 권고 기준 충족';
-        const maxParityNote = result.isMaxParity ? `  ⚠️ 최대 Parity 구성: Write Quorum = K+1 (${result.writeQuorum}드라이브), 장애허용 = ${result.driveFailureTolerance}드라이브\n` : null;
-        const unusedDriveNote = result.remainingDrives > 0
-            ? `  미사용 드라이브: ${result.remainingDrives}개 (${result.inactiveRawTB.toFixed(1)} TiB RAW) - Usable 계산 제외`
+        const maxParityNote = result.isErasureLayoutValid && result.isMaxParity ? `  ⚠️ Data=Parity 특수 구성: Write Quorum = K+1 (${result.writeQuorum}드라이브), 장애허용 = ${result.driveFailureTolerance}드라이브\n` : null;
+        const ecExportLines = result.isErasureLayoutValid ? [
+            `  Data ${result.dataShards} / Parity ${result.parityShards} / 장애허용: 최대 ${result.driveFailureTolerance}드라이브`,
+            `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
+        ] : [
+            '  구성 불가: Data/Parity 및 Quorum을 산정할 수 없습니다.',
+        ];
+        const invalidLayoutNote = !result.isErasureLayoutValid
+            ? `  ❌ 구성 불가: 전체 ${result.totalDrives}드라이브가 Stripe ${input.stripeSize}로 나누어떨어지지 않습니다.`
             : null;
         const raidModelNote = input.raidType !== 'JBOD'
             ? `  ⚠️ RAID 참고: MinIO는 OS에 노출된 RAID 볼륨을 단일 드라이브처럼 인식할 수 있어 EC Set/장애 허용 계산은 실제 토폴로지와 다를 수 있습니다.`
@@ -1972,18 +2208,20 @@
             `  환경: ${input.environment === 'production' ? '운영 (Production)' : '개발 (Dev)'}`,
             '══════════════════════════════════════════', '',
             '■ 클러스터 구성',
-            `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${fmtDriveSize(input.driveSizeTB)}TB (${input.driveType}) / RAID: ${input.raidType}`,
+            `  노드: ${input.nodeCount}대 / 드라이브: ${input.drivesPerNode}EA × ${formatDriveCapacity(input)} (${input.driveType}) / RAID: ${input.raidType}`,
             `  드라이브 모델: ${input.driveLabel || '직접 입력'}`,
-            `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}GbE`, '',
+            `  EC: Stripe ${input.stripeSize} / Parity ${input.parityShards} / 물리코어: ${input.physicalCores}코어 / RAM: ${input.ramGiB} GiB / NIC: ${input.nicGbps}GbE × ${input.nicPortCount || 1}`, '',
             '■ 고객 요구 조건',
+            input.calculationMode === 'target' ? `  ${getTargetRequirementLabel(input)}` : null,
             `  ${getCustomerRequirementSummary(input)}`, '',
             '■ 스토리지 용량',
-            `  총 RAW: ${result.totalRawTB.toFixed(1)} TiB / Set 편입 RAW: ${result.activeRawTB.toFixed(1)} TiB / 유효 RAW: ${result.effectiveRawTB.toFixed(1)} TiB`,
-            unusedDriveNote,
-            `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${result.usablePerNodeTB.toFixed(1)} TiB`, '',
+            `  총 RAW: ${formatCapacity(result.totalRawTB)} / Set 편입 RAW: ${result.isErasureLayoutValid ? formatCapacity(result.activeRawTB) : '구성 불가'} / 유효 RAW: ${result.isErasureLayoutValid ? formatCapacity(result.effectiveRawTB) : '구성 불가'}`,
+            invalidLayoutNote,
+            result.isErasureLayoutValid
+                ? `  Usable (EC:${input.parityShards}): ${formatCapacity(result.usableTB)} ★ / 효율: ${result.storageEfficiencyPct.toFixed(1)}% / 노드당: ${formatCapacity(result.usablePerNodeTB)}`
+                : '  Usable: 구성 불가', '',
             '■ EC 정보',
-            `  Data ${result.dataShards} / Parity ${result.parityShards} / 장애허용: 최대 ${result.driveFailureTolerance}드라이브`,
-            `  Write Quorum: ${result.writeQuorum}드라이브 / Read Quorum: ${result.readQuorum}드라이브`,
+            ...ecExportLines,
             raidModelNote,
             maxParityNote, '',
             '■ 네트워크 / 메모리',
@@ -1994,7 +2232,7 @@
             ...result.warnings.map(w => `  ${ICON[w.level]} ${w.item} — ${w.message}`), '',
             '■ 전체 상태', `  ${statusLine}`, '',
             '──────────────────────────────────────────',
-            '  MinIO AIStor 사이징 계산기 (공식 EC 계산기 검증 7/7 ✅)',
+            '  MinIO AIStor 사이징 계산기',
             '══════════════════════════════════════════',
         ].filter(l => l !== null).join('\n');
     }
@@ -2086,3 +2324,4 @@
     </script>
 </body>
 </html>
+
